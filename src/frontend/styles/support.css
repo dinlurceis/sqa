@@ -1,0 +1,175 @@
+/* Support module specific styles */
+
+/* Ticket List */
+.support-ticket-list {
+  @apply bg-white rounded-lg shadow-sm;
+}
+
+.ticket-item {
+  @apply transition-all duration-200;
+}
+
+.ticket-item:hover {
+  @apply bg-gray-50;
+}
+
+/* Ticket Detail */
+.support-ticket-detail {
+  min-width: 0;
+}
+
+/* Ticket Composer */
+.ticket-composer textarea {
+  min-height: 90px;
+  @apply resize-none;
+}
+
+/* Support Hub Cards */
+.support-card {
+  @apply bg-white rounded-xl shadow-md p-6 transition-all duration-300;
+}
+
+.support-card:hover {
+  @apply shadow-lg -translate-y-1;
+}
+
+/* Status Badges */
+.status-badge {
+  @apply px-3 py-1 rounded-full text-xs font-medium;
+}
+
+.status-open {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.status-pending {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-in-progress {
+  @apply bg-orange-100 text-orange-800;
+}
+
+.status-resolved {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-closed {
+  @apply bg-gray-100 text-gray-800;
+}
+
+/* Priority Badges */
+.priority-low {
+  @apply bg-gray-100 text-gray-600;
+}
+
+.priority-medium {
+  @apply bg-blue-100 text-blue-600;
+}
+
+.priority-high {
+  @apply bg-orange-100 text-orange-600;
+}
+
+.priority-urgent {
+  @apply bg-red-100 text-red-600;
+}
+
+/* Chat Messages */
+.chat-message {
+  @apply max-w-[80%] p-3 rounded-lg;
+}
+
+.chat-message-customer {
+  @apply bg-blue-600 text-white ml-auto;
+}
+
+.chat-message-support {
+  @apply bg-gray-100 text-gray-700;
+}
+
+/* FAQ Accordion */
+.faq-item {
+  @apply border-b border-gray-100 last:border-b-0;
+}
+
+.faq-question {
+  @apply w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors;
+}
+
+.faq-answer {
+  @apply px-6 pb-4 text-gray-600;
+}
+
+/* Support Search */
+.support-search {
+  @apply relative;
+}
+
+.support-search input {
+  @apply w-full pl-12 pr-4 py-4 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-300;
+}
+
+.support-search-icon {
+  @apply absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5;
+}
+
+/* Category Cards */
+.category-card {
+  @apply bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all hover:-translate-y-1;
+}
+
+.category-card-icon {
+  @apply text-blue-600 group-hover:text-blue-700 transition-colors;
+}
+
+/* Contact Banner */
+.contact-banner {
+  @apply bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-12;
+}
+
+/* Loading States */
+.support-loading {
+  @apply flex items-center justify-center py-8;
+}
+
+.support-loading-spinner {
+  @apply animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600;
+}
+
+/* Empty States */
+.support-empty {
+  @apply text-center py-12;
+}
+
+.support-empty-icon {
+  @apply w-16 h-16 text-gray-300 mx-auto mb-4;
+}
+
+/* Modal */
+.support-modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4;
+}
+
+.support-modal {
+  @apply bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto;
+}
+
+.support-modal-header {
+  @apply p-6 border-b border-gray-100;
+}
+
+.support-modal-body {
+  @apply p-6;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .support-card {
+    @apply p-4;
+  }
+  
+  .chat-message {
+    @apply max-w-[90%];
+  }
+}
