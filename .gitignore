@@ -50,3 +50,4 @@ yarn-error.log*
 
 # Misc
 ngrok.exe
+.py
