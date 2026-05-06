@@ -143,22 +143,6 @@ class InventoryServiceImplTest {
     }
 
     // =========================================================
-    // CLEANUP: Dọn DB sau mỗi test để đảm bảo độc lập
-    // =========================================================
-    @AfterEach
-    void cleanup() {
-        exportOrderItemRepository.deleteAll();
-        exportOrderRepository.deleteAll();
-        productDetailRepository.deleteAll();
-        purchaseOrderItemRepository.deleteAll();
-        purchaseOrderRepository.deleteAll();
-        inventoryStockRepository.deleteAll();
-        warehouseProductRepository.deleteAll();
-        productRepository.deleteAll();
-        supplierRepository.deleteAll();
-    }
-
-    // =========================================================
     // *** TEST GROUP 1: getAllSuppliers ***
     // Mục đích: Kiểm tra lấy toàn bộ danh sách nhà cung cấp
     // =========================================================
