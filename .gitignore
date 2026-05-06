@@ -48,6 +48,7 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+application-test.properties
 # Misc
 ngrok.exe
 .py
