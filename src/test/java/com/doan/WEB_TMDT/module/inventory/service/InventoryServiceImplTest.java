@@ -4,2565 +4,2030 @@ import com.doan.WEB_TMDT.common.dto.ApiResponse;
 import com.doan.WEB_TMDT.module.inventory.dto.*;
 import com.doan.WEB_TMDT.module.inventory.entity.*;
 import com.doan.WEB_TMDT.module.inventory.repository.*;
+import com.doan.WEB_TMDT.module.inventory.service.ProductSpecificationService;
 import com.doan.WEB_TMDT.module.inventory.service.impl.InventoryServiceImpl;
+import com.doan.WEB_TMDT.module.order.repository.OrderRepository;
 import com.doan.WEB_TMDT.module.product.entity.Product;
 import com.doan.WEB_TMDT.module.product.repository.ProductRepository;
 import com.doan.WEB_TMDT.module.accounting.service.SupplierPayableService;
 import com.doan.WEB_TMDT.module.shipping.service.ShippingService;
-import com.doan.WEB_TMDT.module.order.repository.OrderRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import com.doan.WEB_TMDT.TestResultLogger;
+
+import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
- * =============================================================
- * BLACK-BOX UNIT TESTS – InventoryServiceImpl
- * =============================================================
- *
- * Mục tiêu: Tìm bug trong hệ thống, không phải confirm code đúng.
- * Phương pháp: Black-box testing – test theo nghiệp vụ thực tế.
- *
- * Framework: JUnit 5 + Mockito
- * Tất cả repository và dependency đều được mock.
- *
- * Rollback: Không có thay đổi DB thật vì dùng mock – mỗi test độc lập.
+ * Unit test tích hợp cho InventoryServiceImpl.
+ * Dùng MySQL local để test thẳng với database thật,
+ * đảm bảo mỗi test độc lập và rollback sau khi chạy xong.
  */
-@ExtendWith({MockitoExtension.class, TestResultLogger.class})
+@SpringBootTest
+@ActiveProfiles("test")
+@Transactional
+@DisplayName("INVENTORY SERVICE TEST")
 class InventoryServiceImplTest {
 
-    // ─── Mock Dependencies ───────────────────────────────────────
-    @Mock private SupplierRepository supplierRepository;
-    @Mock private WarehouseProductRepository warehouseProductRepository;
-    @Mock private InventoryStockRepository inventoryStockRepository;
-    @Mock private PurchaseOrderRepository purchaseOrderRepository;
-    @Mock private PurchaseOrderItemRepository purchaseOrderItemRepository;
-    @Mock private ExportOrderRepository exportOrderRepository;
-    @Mock private ExportOrderItemRepository exportOrderItemRepository;
-    @Mock private ProductDetailRepository productDetailRepository;
-    @Mock private ProductRepository productRepository;
-    @Mock private ProductSpecificationService productSpecificationService;
-    @Mock private SupplierPayableService supplierPayableService;
-    @Mock private ShippingService shippingService;
-    @Mock private OrderRepository orderRepository;
-
-    @InjectMocks
+    // =========================================================
+    // AUTOWIRED: Inject service và repositories cần thiết
+    // =========================================================
+    @Autowired
     private InventoryServiceImpl inventoryService;
 
-    // ─── Fixture Data ────────────────────────────────────────────
-    private Supplier supplier;
-    private WarehouseProduct warehouseProduct;
-    private InventoryStock inventoryStock;
-    private PurchaseOrder purchaseOrder;
-    private ProductDetail productDetail;
+    @Autowired
+    private SupplierRepository supplierRepository;
 
-    @BeforeEach
-    void setUp() {
-        supplier = Supplier.builder()
-                .id(1L)
-                .name("Nhà cung cấp A")
-                .taxCode("0123456789")
-                .email("ncc@test.com")
-                .phone("0900000001")
-                .address("Hà Nội")
+    @Autowired
+    private WarehouseProductRepository warehouseProductRepository;
+
+    @Autowired
+    private PurchaseOrderRepository purchaseOrderRepository;
+
+    @Autowired
+    private PurchaseOrderItemRepository purchaseOrderItemRepository;
+
+    @Autowired
+    private ProductDetailRepository productDetailRepository;
+
+    @Autowired
+    private InventoryStockRepository inventoryStockRepository;
+
+    @Autowired
+    private ExportOrderRepository exportOrderRepository;
+
+    @Autowired
+    private ExportOrderItemRepository exportOrderItemRepository;
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    // =========================================================
+    // HELPER METHODS: Tạo dữ liệu mẫu cho từng test
+    // =========================================================
+
+    /** Tạo Supplier mẫu với taxCode duy nhất */
+    private Supplier createTestSupplier(String suffix) {
+        Supplier supplier = Supplier.builder()
+                .name("Nhà cung cấp " + suffix)
+                .taxCode("TAX" + suffix)
+                .email("supplier" + suffix + "@test.com")
+                .phone("09000" + suffix)
+                .address("Địa chỉ " + suffix)
+                .bankAccount("123456" + suffix)
+                .paymentTerm("NET30")
+                .paymentTermDays(30)
                 .active(true)
                 .autoCreated(false)
                 .build();
+        return supplierRepository.save(supplier);
+    }
 
-        warehouseProduct = WarehouseProduct.builder()
-                .id(10L)
-                .sku("SKU-LAPTOP-001")
-                .internalName("Laptop Gaming X")
+    /** Tạo WarehouseProduct mẫu với SKU duy nhất */
+    private WarehouseProduct createTestWarehouseProduct(String sku, Supplier supplier) {
+        WarehouseProduct wp = WarehouseProduct.builder()
+                .sku(sku)
+                .internalName("Sản phẩm " + sku)
                 .supplier(supplier)
-                .description("Laptop gaming cao cấp")
-                .techSpecsJson("{\"ram\":\"16GB\",\"cpu\":\"i7\"}")
-                .lastImportDate(LocalDateTime.now().minusDays(1))
+                .description("Mô tả " + sku)
+                .techSpecsJson("{\"cpu\":\"Intel i5\"}")
+                .lastImportDate(LocalDateTime.now())
                 .build();
+        return warehouseProductRepository.save(wp);
+    }
 
-        inventoryStock = InventoryStock.builder()
-                .id(1L)
-                .warehouseProduct(warehouseProduct)
-                .onHand(50L)
-                .reserved(5L)
-                .damaged(2L)
+    /** Tạo Product mẫu liên kết với WarehouseProduct */
+    private Product createTestProduct(String sku, WarehouseProduct wp) {
+        Product product = Product.builder()
+                .sku(sku)
+                .name("Sản phẩm " + sku)
+                .stockQuantity(0L)
+                .reservedQuantity(0L)
                 .build();
+        product = productRepository.save(product);
+        wp.setProduct(product);
+        warehouseProductRepository.save(wp);
+        return product;
+    }
 
-        purchaseOrder = PurchaseOrder.builder()
-                .id(1L)
-                .poCode("PO-2024-001")
+    /** Tạo InventoryStock mẫu */
+    private InventoryStock createTestStock(WarehouseProduct wp, long onHand, long reserved) {
+        InventoryStock stock = InventoryStock.builder()
+                .warehouseProduct(wp)
+                .onHand(onHand)
+                .reserved(reserved)
+                .damaged(0L)
+                .build();
+        return inventoryStockRepository.save(stock);
+    }
+
+    /** Tạo ProductDetail (serial) mẫu */
+    private ProductDetail createTestProductDetail(String serial, WarehouseProduct wp,
+                                                   ProductStatus status, double importPrice) {
+        ProductDetail pd = ProductDetail.builder()
+                .serialNumber(serial)
+                .importPrice(importPrice)
+                .importDate(LocalDateTime.now())
+                .warrantyMonths(12)
+                .status(status)
+                .warehouseProduct(wp)
+                .build();
+        return productDetailRepository.save(pd);
+    }
+
+    // =========================================================
+    // CLEANUP: Dọn DB sau mỗi test để đảm bảo độc lập
+    // =========================================================
+    @AfterEach
+    void cleanup() {
+        exportOrderItemRepository.deleteAll();
+        exportOrderRepository.deleteAll();
+        productDetailRepository.deleteAll();
+        purchaseOrderItemRepository.deleteAll();
+        purchaseOrderRepository.deleteAll();
+        inventoryStockRepository.deleteAll();
+        warehouseProductRepository.deleteAll();
+        productRepository.deleteAll();
+        supplierRepository.deleteAll();
+    }
+
+    // =========================================================
+    // *** TEST GROUP 1: getAllSuppliers ***
+    // Mục đích: Kiểm tra lấy toàn bộ danh sách nhà cung cấp
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_001 - Lấy danh sách nhà cung cấp khi DB rỗng")
+    void TC_INVENTORY_001_getAllSuppliers_whenEmpty() {
+        // Đảm bảo DB rỗng
+        supplierRepository.deleteAll();
+        long countBefore = supplierRepository.count();
+
+        // Gọi service
+        ApiResponse response = inventoryService.getAllSuppliers();
+
+        // Kiểm tra response
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Danh sách nhà cung cấp");
+
+        @SuppressWarnings("unchecked")
+        List<Supplier> data = (List<Supplier>) response.getData();
+        assertThat(data).isEmpty();
+
+        // Kiểm tra DB không thay đổi
+        assertThat(supplierRepository.count()).isEqualTo(countBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_002 - Lấy danh sách nhà cung cấp khi có dữ liệu")
+    void TC_INVENTORY_002_getAllSuppliers_whenHasData() {
+        // Chuẩn bị: tạo 2 nhà cung cấp
+        Supplier s1 = createTestSupplier("A01");
+        Supplier s2 = createTestSupplier("B02");
+        long countBefore = supplierRepository.count(); // = 2
+
+        // Gọi service
+        ApiResponse response = inventoryService.getAllSuppliers();
+
+        // Kiểm tra response thành công
+        assertThat(response.isSuccess()).isTrue();
+
+        @SuppressWarnings("unchecked")
+        List<Supplier> data = (List<Supplier>) response.getData();
+        assertThat(data).hasSize(2);
+
+        // Kiểm tra từng thuộc tính của phần tử đầu tiên khớp với DB
+        Supplier fromDb1 = supplierRepository.findById(s1.getId()).orElseThrow();
+        assertThat(fromDb1.getName()).isEqualTo("Nhà cung cấp A01");
+        assertThat(fromDb1.getTaxCode()).isEqualTo("TAXA01");
+        assertThat(fromDb1.getEmail()).isEqualTo("supplierA01@test.com");
+        assertThat(fromDb1.getPhone()).isEqualTo("09000A01");
+        assertThat(fromDb1.getActive()).isTrue();
+
+        // Kiểm tra DB không bị thêm/xóa ngoài mong muốn
+        assertThat(supplierRepository.count()).isEqualTo(countBefore);
+    }
+
+    // =========================================================
+    // *** TEST GROUP 2: getOrCreateSupplier ***
+    // Mục đích: Kiểm tra tìm hoặc tạo nhà cung cấp theo taxCode/email/phone
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_003 - Tìm thấy nhà cung cấp theo taxCode (không tạo mới)")
+    void TC_INVENTORY_003_getOrCreateSupplier_foundByTaxCode() {
+        // Chuẩn bị: tạo supplier với taxCode cụ thể
+        Supplier existing = createTestSupplier("TAX001");
+        long countBefore = supplierRepository.count();
+
+        CreateSupplierRequest req = new CreateSupplierRequest();
+        req.setTaxCode("TAXTAX001");
+        req.setName("Nhà cung cấp khác");
+
+        // Gọi service
+        ApiResponse response = inventoryService.getOrCreateSupplier(req);
+
+        // Phải trả về supplier cũ, KHÔNG tạo mới
+        assertThat(response.isSuccess()).isTrue();
+        Supplier returned = (Supplier) response.getData();
+        assertThat(returned.getId()).isEqualTo(existing.getId());
+        assertThat(returned.getTaxCode()).isEqualTo("TAXTAX001");
+
+        // Kiểm tra DB không insert thêm record
+        assertThat(supplierRepository.count()).isEqualTo(countBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_004 - Tìm thấy nhà cung cấp theo email khi taxCode null")
+    void TC_INVENTORY_004_getOrCreateSupplier_foundByEmail() {
+        // Chuẩn bị: supplier đã tồn tại
+        Supplier existing = createTestSupplier("EM01");
+        long countBefore = supplierRepository.count();
+
+        CreateSupplierRequest req = new CreateSupplierRequest();
+        req.setTaxCode(null); // taxCode null → tìm theo email
+        req.setEmail("supplierEM01@test.com");
+
+        ApiResponse response = inventoryService.getOrCreateSupplier(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        Supplier returned = (Supplier) response.getData();
+        assertThat(returned.getId()).isEqualTo(existing.getId());
+
+        // Số lượng record không đổi
+        assertThat(supplierRepository.count()).isEqualTo(countBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_005 - Tìm thấy nhà cung cấp theo phone khi taxCode và email null")
+    void TC_INVENTORY_005_getOrCreateSupplier_foundByPhone() {
+        Supplier existing = createTestSupplier("PH01");
+        long countBefore = supplierRepository.count();
+
+        CreateSupplierRequest req = new CreateSupplierRequest();
+        req.setTaxCode(null);
+        req.setEmail(null);
+        req.setPhone("09000PH01");
+
+        ApiResponse response = inventoryService.getOrCreateSupplier(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        Supplier returned = (Supplier) response.getData();
+        assertThat(returned.getId()).isEqualTo(existing.getId());
+        assertThat(supplierRepository.count()).isEqualTo(countBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_006 - Tạo mới nhà cung cấp khi không tìm thấy theo bất kỳ trường nào")
+    void TC_INVENTORY_006_getOrCreateSupplier_createNew() {
+        long countBefore = supplierRepository.count();
+
+        CreateSupplierRequest req = new CreateSupplierRequest();
+        req.setName("Nhà cung cấp hoàn toàn mới");
+        req.setTaxCode("TAXNEW999");
+        req.setEmail("new999@test.com");
+        req.setPhone("0988999888");
+        req.setAddress("Hà Nội");
+        req.setBankAccount("ACC999");
+        req.setPaymentTerm("NET60");
+        req.setPaymentTermDays(60);
+
+        ApiResponse response = inventoryService.getOrCreateSupplier(req);
+
+        // Kiểm tra response
+        assertThat(response.isSuccess()).isTrue();
+        Supplier returned = (Supplier) response.getData();
+        assertThat(returned.getId()).isNotNull();
+
+        // Kiểm tra DB tăng thêm 1 record
+        assertThat(supplierRepository.count()).isEqualTo(countBefore + 1);
+
+        // Lấy từ DB và assert tất cả thuộc tính
+        Supplier fromDb = supplierRepository.findById(returned.getId()).orElseThrow();
+        assertThat(fromDb.getName()).isEqualTo("Nhà cung cấp hoàn toàn mới");
+        assertThat(fromDb.getTaxCode()).isEqualTo("TAXNEW999");
+        assertThat(fromDb.getEmail()).isEqualTo("new999@test.com");
+        assertThat(fromDb.getPhone()).isEqualTo("0988999888");
+        assertThat(fromDb.getAddress()).isEqualTo("Hà Nội");
+        assertThat(fromDb.getBankAccount()).isEqualTo("ACC999");
+        assertThat(fromDb.getPaymentTerm()).isEqualTo("NET60");
+        assertThat(fromDb.getPaymentTermDays()).isEqualTo(60);
+        assertThat(fromDb.getActive()).isTrue();
+        assertThat(fromDb.getAutoCreated()).isTrue();
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_007 - getOrCreateSupplier với tất cả trường null (tạo mới không định danh)")
+    void TC_INVENTORY_007_getOrCreateSupplier_allNull() {
+        long countBefore = supplierRepository.count();
+
+        CreateSupplierRequest req = new CreateSupplierRequest();
+        req.setTaxCode(null);
+        req.setEmail(null);
+        req.setPhone(null);
+        req.setName("Supplier ẩn danh");
+
+        ApiResponse response = inventoryService.getOrCreateSupplier(req);
+
+        // Vẫn tạo mới vì không có trường nào để lookup
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(supplierRepository.count()).isEqualTo(countBefore + 1);
+    }
+
+    // =========================================================
+    // *** TEST GROUP 3: createWarehouseProduct ***
+    // Mục đích: Kiểm tra tạo sản phẩm kho mới
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_008 - Tạo warehouse product thành công")
+    void TC_INVENTORY_008_createWarehouseProduct_success() {
+        Supplier supplier = createTestSupplier("WP01");
+        long countBefore = warehouseProductRepository.count();
+
+        CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
+        req.setSku("SKU-WP-001");
+        req.setInternalName("Laptop ABC");
+        req.setSupplierId(supplier.getId());
+        req.setDescription("Laptop cao cấp");
+        req.setTechSpecsJson("{\"ram\":\"16GB\",\"cpu\":\"i7\"}");
+
+        ApiResponse response = inventoryService.createWarehouseProduct(req);
+
+        // Kiểm tra response
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Tạo sản phẩm kho thành công");
+
+        // Kiểm tra DB tăng thêm 1
+        assertThat(warehouseProductRepository.count()).isEqualTo(countBefore + 1);
+
+        // Lấy từ DB và assert tất cả thuộc tính
+        WarehouseProduct fromDb = warehouseProductRepository.findBySku("SKU-WP-001").orElseThrow();
+        assertThat(fromDb.getSku()).isEqualTo("SKU-WP-001");
+        assertThat(fromDb.getInternalName()).isEqualTo("Laptop ABC");
+        assertThat(fromDb.getDescription()).isEqualTo("Laptop cao cấp");
+        assertThat(fromDb.getTechSpecsJson()).isEqualTo("{\"ram\":\"16GB\",\"cpu\":\"i7\"}");
+        assertThat(fromDb.getSupplier().getId()).isEqualTo(supplier.getId());
+        assertThat(fromDb.getLastImportDate()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_009 - Tạo warehouse product thất bại khi SKU trùng")
+    void TC_INVENTORY_009_createWarehouseProduct_duplicateSku() {
+        Supplier supplier = createTestSupplier("WP02");
+        // Tạo sẵn product với SKU này
+        createTestWarehouseProduct("SKU-DUP-001", supplier);
+        long countBefore = warehouseProductRepository.count();
+
+        CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
+        req.setSku("SKU-DUP-001"); // SKU đã tồn tại
+        req.setInternalName("Sản phẩm trùng SKU");
+
+        ApiResponse response = inventoryService.createWarehouseProduct(req);
+
+        // Phải trả về lỗi
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("SKU đã tồn tại");
+
+        // DB không được insert thêm
+        assertThat(warehouseProductRepository.count()).isEqualTo(countBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_010 - Tạo warehouse product với supplierId không tồn tại → exception")
+    void TC_INVENTORY_010_createWarehouseProduct_supplierNotFound() {
+        long countBefore = warehouseProductRepository.count();
+
+        CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
+        req.setSku("SKU-NOSUP-001");
+        req.setInternalName("Sản phẩm không có NCC");
+        req.setSupplierId(999999L); // ID không tồn tại
+
+        // Phải throw exception
+        assertThatThrownBy(() -> inventoryService.createWarehouseProduct(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy nhà cung cấp");
+
+        // DB không thay đổi
+        assertThat(warehouseProductRepository.count()).isEqualTo(countBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_011 - Tạo warehouse product với techSpecsJson null → dùng '{}'")
+    void TC_INVENTORY_011_createWarehouseProduct_nullTechSpecs() {
+        Supplier supplier = createTestSupplier("WP03");
+        long countBefore = warehouseProductRepository.count();
+
+        CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
+        req.setSku("SKU-NULLSPEC-001");
+        req.setInternalName("Sản phẩm không có specs");
+        req.setSupplierId(supplier.getId());
+        req.setTechSpecsJson(null); // null → phải default là "{}"
+
+        ApiResponse response = inventoryService.createWarehouseProduct(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(warehouseProductRepository.count()).isEqualTo(countBefore + 1);
+
+        WarehouseProduct fromDb = warehouseProductRepository.findBySku("SKU-NULLSPEC-001").orElseThrow();
+        assertThat(fromDb.getTechSpecsJson()).isEqualTo("{}");
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_012 - Tạo warehouse product không có supplierId (null)")
+    void TC_INVENTORY_012_createWarehouseProduct_noSupplier() {
+        long countBefore = warehouseProductRepository.count();
+
+        CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
+        req.setSku("SKU-NOSUP-002");
+        req.setInternalName("Sản phẩm tự cung cấp");
+        req.setSupplierId(null); // không có supplier
+
+        ApiResponse response = inventoryService.createWarehouseProduct(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(warehouseProductRepository.count()).isEqualTo(countBefore + 1);
+
+        WarehouseProduct fromDb = warehouseProductRepository.findBySku("SKU-NOSUP-002").orElseThrow();
+        assertThat(fromDb.getSupplier()).isNull();
+    }
+
+    // =========================================================
+    // *** TEST GROUP 4: updateWarehouseProduct ***
+    // Mục đích: Kiểm tra cập nhật thông tin sản phẩm kho
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_013 - Cập nhật warehouse product thành công")
+    void TC_INVENTORY_013_updateWarehouseProduct_success() {
+        Supplier supplier = createTestSupplier("UPD01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-UPD-001", supplier);
+        long countBefore = warehouseProductRepository.count();
+
+        CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
+        req.setSku("SKU-UPD-001"); // giữ nguyên SKU
+        req.setInternalName("Laptop XYZ UPDATED");
+        req.setDescription("Mô tả đã cập nhật");
+        req.setTechSpecsJson("{\"ram\":\"32GB\"}");
+        req.setSupplierId(supplier.getId());
+
+        ApiResponse response = inventoryService.updateWarehouseProduct(wp.getId(), req);
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Cập nhật sản phẩm kho thành công");
+
+        // Số record không đổi (update, không insert)
+        assertThat(warehouseProductRepository.count()).isEqualTo(countBefore);
+
+        // Lấy từ DB và assert tất cả thuộc tính đã được cập nhật
+        WarehouseProduct fromDb = warehouseProductRepository.findById(wp.getId()).orElseThrow();
+        assertThat(fromDb.getInternalName()).isEqualTo("Laptop XYZ UPDATED");
+        assertThat(fromDb.getDescription()).isEqualTo("Mô tả đã cập nhật");
+        assertThat(fromDb.getTechSpecsJson()).isEqualTo("{\"ram\":\"32GB\"}");
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_014 - Cập nhật warehouse product với SKU mới bị trùng")
+    void TC_INVENTORY_014_updateWarehouseProduct_skuConflict() {
+        Supplier supplier = createTestSupplier("UPD02");
+        WarehouseProduct wp1 = createTestWarehouseProduct("SKU-ORIG-001", supplier);
+        WarehouseProduct wp2 = createTestWarehouseProduct("SKU-CONFLICT-001", supplier);
+        long countBefore = warehouseProductRepository.count();
+
+        CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
+        req.setSku("SKU-CONFLICT-001"); // SKU đã thuộc về wp2
+        req.setInternalName("Laptop Trùng");
+
+        ApiResponse response = inventoryService.updateWarehouseProduct(wp1.getId(), req);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("SKU đã tồn tại");
+
+        // DB không thay đổi
+        assertThat(warehouseProductRepository.count()).isEqualTo(countBefore);
+
+        // wp1 vẫn còn SKU cũ
+        WarehouseProduct unchanged = warehouseProductRepository.findById(wp1.getId()).orElseThrow();
+        assertThat(unchanged.getSku()).isEqualTo("SKU-ORIG-001");
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_015 - Cập nhật warehouse product với ID không tồn tại → exception")
+    void TC_INVENTORY_015_updateWarehouseProduct_notFound() {
+        CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
+        req.setSku("SKU-ANY");
+        req.setInternalName("Bất kỳ");
+
+        assertThatThrownBy(() -> inventoryService.updateWarehouseProduct(999999L, req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy sản phẩm");
+    }
+
+    // =========================================================
+    // *** TEST GROUP 5: createPurchaseOrder ***
+    // Mục đích: Kiểm tra tạo phiếu nhập hàng
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_016 - Tạo phiếu nhập hàng thành công với NCC đã tồn tại")
+    void TC_INVENTORY_016_createPurchaseOrder_existingSupplier() {
+        Supplier supplier = createTestSupplier("PO01");
+        long poBefore = purchaseOrderRepository.count();
+        long wpBefore = warehouseProductRepository.count();
+
+        CreateSupplierRequest sreq = new CreateSupplierRequest();
+        sreq.setTaxCode("TAXPO01");
+        sreq.setName("Nhà cung cấp PO01");
+
+        POItemRequest itemReq = new POItemRequest();
+        itemReq.setSku("SKU-PO-001");
+        itemReq.setInternalName("Sản phẩm PO test");
+        itemReq.setQuantity(5L);
+        itemReq.setUnitCost(1000000.0);
+        itemReq.setWarrantyMonths(12);
+        itemReq.setTechSpecsJson("{\"color\":\"black\"}");
+
+        CreatePORequest req = new CreatePORequest();
+        req.setPoCode("PO-TEST-001");
+        req.setSupplier(sreq);
+        req.setItems(List.of(itemReq));
+        req.setCreatedBy("admin");
+        req.setNote("Test PO");
+
+        ApiResponse response = inventoryService.createPurchaseOrder(req);
+
+        // Kiểm tra response
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Tạo phiếu nhập hàng thành công");
+
+        // Kiểm tra DB: tăng thêm 1 PO
+        assertThat(purchaseOrderRepository.count()).isEqualTo(poBefore + 1);
+        // Tăng thêm 1 WarehouseProduct (SKU mới)
+        assertThat(warehouseProductRepository.count()).isEqualTo(wpBefore + 1);
+
+        // Lấy từ DB và assert
+        PurchaseOrder fromDb = purchaseOrderRepository.findByPoCode("PO-TEST-001").orElseThrow();
+        assertThat(fromDb.getPoCode()).isEqualTo("PO-TEST-001");
+        assertThat(fromDb.getStatus()).isEqualTo(POStatus.CREATED);
+        assertThat(fromDb.getCreatedBy()).isEqualTo("admin");
+        assertThat(fromDb.getNote()).isEqualTo("Test PO");
+        assertThat(fromDb.getSupplier().getTaxCode()).isEqualTo("TAXPO01");
+        assertThat(fromDb.getItems()).hasSize(1);
+
+        PurchaseOrderItem item = fromDb.getItems().get(0);
+        assertThat(item.getSku()).isEqualTo("SKU-PO-001");
+        assertThat(item.getQuantity()).isEqualTo(5L);
+        assertThat(item.getUnitCost()).isEqualTo(1000000.0);
+        assertThat(item.getWarrantyMonths()).isEqualTo(12);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_017 - Tạo phiếu nhập hàng với NCC mới (tự động tạo NCC)")
+    void TC_INVENTORY_017_createPurchaseOrder_newSupplierAutoCreated() {
+        long supplierBefore = supplierRepository.count();
+        long poBefore = purchaseOrderRepository.count();
+
+        CreateSupplierRequest sreq = new CreateSupplierRequest();
+        sreq.setTaxCode("TAXNEWSUP999");
+        sreq.setName("NCC Mới Tự Động");
+        sreq.setEmail("newsupauto@test.com");
+        sreq.setPhone("0999888777");
+        sreq.setAddress("TP HCM");
+
+        POItemRequest itemReq = new POItemRequest();
+        itemReq.setSku("SKU-PO-AUTO-001");
+        itemReq.setQuantity(2L);
+        itemReq.setUnitCost(500000.0);
+
+        CreatePORequest req = new CreatePORequest();
+        req.setPoCode("PO-AUTO-001");
+        req.setSupplier(sreq);
+        req.setItems(List.of(itemReq));
+        req.setCreatedBy("system");
+
+        ApiResponse response = inventoryService.createPurchaseOrder(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        // Phải tạo thêm 1 supplier mới
+        assertThat(supplierRepository.count()).isEqualTo(supplierBefore + 1);
+        assertThat(purchaseOrderRepository.count()).isEqualTo(poBefore + 1);
+
+        // Kiểm tra supplier được tạo đúng
+        Supplier newSup = supplierRepository.findByTaxCode("TAXNEWSUP999").orElseThrow();
+        assertThat(newSup.getName()).isEqualTo("NCC Mới Tự Động");
+        assertThat(newSup.getAutoCreated()).isTrue();
+        assertThat(newSup.getActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_018 - Tạo phiếu nhập thất bại khi thiếu thông tin NCC (taxCode null)")
+    void TC_INVENTORY_018_createPurchaseOrder_missingTaxCode() {
+        long poBefore = purchaseOrderRepository.count();
+
+        CreateSupplierRequest sreq = new CreateSupplierRequest();
+        sreq.setTaxCode(null); // thiếu taxCode
+
+        CreatePORequest req = new CreatePORequest();
+        req.setPoCode("PO-INVALID-001");
+        req.setSupplier(sreq);
+        req.setItems(List.of());
+
+        assertThatThrownBy(() -> inventoryService.createPurchaseOrder(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Thiếu thông tin nhà cung cấp");
+
+        // DB không thay đổi
+        assertThat(purchaseOrderRepository.count()).isEqualTo(poBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_019 - Tạo phiếu nhập thất bại khi supplier null")
+    void TC_INVENTORY_019_createPurchaseOrder_nullSupplier() {
+        long poBefore = purchaseOrderRepository.count();
+
+        CreatePORequest req = new CreatePORequest();
+        req.setPoCode("PO-NULLSUP-001");
+        req.setSupplier(null); // supplier null
+
+        assertThatThrownBy(() -> inventoryService.createPurchaseOrder(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Thiếu thông tin nhà cung cấp");
+
+        assertThat(purchaseOrderRepository.count()).isEqualTo(poBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_020 - Tạo phiếu nhập với WarehouseProduct đã tồn tại (không tạo mới)")
+    void TC_INVENTORY_020_createPurchaseOrder_existingWarehouseProduct() {
+        Supplier supplier = createTestSupplier("PO02");
+        WarehouseProduct existingWp = createTestWarehouseProduct("SKU-EXIST-PO", supplier);
+        long wpBefore = warehouseProductRepository.count();
+
+        CreateSupplierRequest sreq = new CreateSupplierRequest();
+        sreq.setTaxCode("TAXPO02");
+
+        POItemRequest itemReq = new POItemRequest();
+        itemReq.setSku("SKU-EXIST-PO"); // SKU đã tồn tại
+        itemReq.setQuantity(3L);
+        itemReq.setUnitCost(200000.0);
+
+        CreatePORequest req = new CreatePORequest();
+        req.setPoCode("PO-REUSE-001");
+        req.setSupplier(sreq);
+        req.setItems(List.of(itemReq));
+
+        ApiResponse response = inventoryService.createPurchaseOrder(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        // WarehouseProduct không được tạo thêm
+        assertThat(warehouseProductRepository.count()).isEqualTo(wpBefore);
+    }
+
+    // =========================================================
+    // *** TEST GROUP 6: completePurchaseOrder ***
+    // Mục đích: Kiểm tra hoàn tất nhập hàng (gắn serial, cập nhật tồn kho)
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_021 - Hoàn tất nhập hàng thành công")
+    @Transactional
+    void TC_INVENTORY_021_completePurchaseOrder_success() {
+        // Chuẩn bị PO
+        Supplier supplier = createTestSupplier("CPO01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-CPO-001", supplier);
+
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-COMPLETE-001")
                 .supplier(supplier)
                 .status(POStatus.CREATED)
                 .orderDate(LocalDateTime.now())
-                .items(new ArrayList<>())
+                .createdBy("admin")
                 .build();
 
-        productDetail = ProductDetail.builder()
-                .id(1L)
-                .serialNumber("SN-ABCDEF-001")
-                .warehouseProduct(warehouseProduct)
-                .status(ProductStatus.IN_STOCK)
-                .importPrice(15_000_000.0)
+        PurchaseOrderItem item = PurchaseOrderItem.builder()
+                .purchaseOrder(po)
+                .sku("SKU-CPO-001")
+                .warehouseProduct(wp)
+                .quantity(2L)
+                .unitCost(1500000.0)
+                .warrantyMonths(24)
+                .build();
+
+        po.setItems(List.of(item));
+        purchaseOrderRepository.save(po);
+
+        long detailBefore = productDetailRepository.count();
+        long stockBefore = inventoryStockRepository.count();
+
+        // Chuẩn bị request hoàn tất
+        ProductSerialRequest serialReq = new ProductSerialRequest();
+        serialReq.setProductSku("SKU-CPO-001");
+        serialReq.setSerialNumbers(List.of("SN-CPO-001", "SN-CPO-002"));
+
+        CompletePORequest req = new CompletePORequest();
+        req.setPoId(po.getId());
+        req.setSerials(List.of(serialReq));
+        req.setReceivedDate(LocalDateTime.now());
+
+        ApiResponse response = inventoryService.completePurchaseOrder(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Hoàn tất nhập hàng thành công!");
+
+        // Kiểm tra PO status đã chuyển RECEIVED
+        PurchaseOrder updatedPo = purchaseOrderRepository.findById(po.getId()).orElseThrow();
+        assertThat(updatedPo.getStatus()).isEqualTo(POStatus.RECEIVED);
+        assertThat(updatedPo.getReceivedDate()).isNotNull();
+
+        // Kiểm tra 2 ProductDetail được tạo
+        assertThat(productDetailRepository.count()).isEqualTo(detailBefore + 2);
+
+        ProductDetail pd1 = productDetailRepository.findBySerialNumber("SN-CPO-001").orElseThrow();
+        assertThat(pd1.getStatus()).isEqualTo(ProductStatus.IN_STOCK);
+        assertThat(pd1.getImportPrice()).isEqualTo(1500000.0);
+        assertThat(pd1.getWarrantyMonths()).isEqualTo(24);
+        assertThat(pd1.getImportDate()).isNotNull();
+
+        ProductDetail pd2 = productDetailRepository.findBySerialNumber("SN-CPO-002").orElseThrow();
+        assertThat(pd2.getStatus()).isEqualTo(ProductStatus.IN_STOCK);
+
+        // Kiểm tra tồn kho được cập nhật
+        InventoryStock stock = inventoryStockRepository.findByWarehouseProduct_Id(wp.getId()).orElseThrow();
+        assertThat(stock.getOnHand()).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_022 - Hoàn tất nhập hàng thất bại khi PO không tồn tại")
+    void TC_INVENTORY_022_completePurchaseOrder_poNotFound() {
+        long detailBefore = productDetailRepository.count();
+
+        CompletePORequest req = new CompletePORequest();
+        req.setPoId(999999L);
+
+        assertThatThrownBy(() -> inventoryService.completePurchaseOrder(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy phiếu nhập");
+
+        // Không có ProductDetail nào được tạo
+        assertThat(productDetailRepository.count()).isEqualTo(detailBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_023 - Hoàn tất nhập hàng thất bại khi PO không ở trạng thái CREATED")
+    void TC_INVENTORY_023_completePurchaseOrder_wrongStatus() {
+        Supplier supplier = createTestSupplier("CPO02");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-CPO-002", supplier);
+
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-RECEIVED-002")
+                .supplier(supplier)
+                .status(POStatus.RECEIVED) // Đã nhập rồi
+                .orderDate(LocalDateTime.now())
+                .build();
+        po.setItems(List.of());
+        purchaseOrderRepository.save(po);
+
+        long detailBefore = productDetailRepository.count();
+
+        CompletePORequest req = new CompletePORequest();
+        req.setPoId(po.getId());
+        req.setSerials(List.of());
+
+        ApiResponse response = inventoryService.completePurchaseOrder(req);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("không ở trạng thái chờ nhập hàng");
+
+        // Không có gì thay đổi trong DB
+        assertThat(productDetailRepository.count()).isEqualTo(detailBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_024 - Hoàn tất nhập hàng thất bại khi số serial không khớp số lượng")
+    @Transactional
+    void TC_INVENTORY_024_completePurchaseOrder_serialCountMismatch() {
+        Supplier supplier = createTestSupplier("CPO03");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-CPO-003", supplier);
+
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-MISMATCH-003")
+                .supplier(supplier)
+                .status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now())
+                .build();
+
+        PurchaseOrderItem item = PurchaseOrderItem.builder()
+                .purchaseOrder(po)
+                .sku("SKU-CPO-003")
+                .warehouseProduct(wp)
+                .quantity(3L) // yêu cầu 3 serial
+                .unitCost(1000000.0)
                 .warrantyMonths(12)
-                .importDate(LocalDateTime.now().minusDays(1))
                 .build();
+
+        po.setItems(List.of(item));
+        purchaseOrderRepository.save(po);
+        long detailBefore = productDetailRepository.count();
+
+        ProductSerialRequest serialReq = new ProductSerialRequest();
+        serialReq.setProductSku("SKU-CPO-003");
+        serialReq.setSerialNumbers(List.of("SN-MM-001", "SN-MM-002")); // chỉ 2 serial, thiếu 1
+
+        CompletePORequest req = new CompletePORequest();
+        req.setPoId(po.getId());
+        req.setSerials(List.of(serialReq));
+        req.setReceivedDate(LocalDateTime.now());
+
+        assertThatThrownBy(() -> inventoryService.completePurchaseOrder(req))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Số serial")
+                .hasMessageContaining("không khớp");
+
+        // Kiểm tra rollback: không có detail nào được tạo
+        assertThat(productDetailRepository.count()).isEqualTo(detailBefore);
     }
 
-    // ================================================================
-    // TC_INV_001 → TC_INV_005: getAllSuppliers
-    // ================================================================
-    @Nested
-    @DisplayName("getAllSuppliers Tests")
-    class GetAllSuppliersTests {
+    @Test
+    @DisplayName("TC_INVENTORY_025 - Hoàn tất nhập hàng thất bại khi serial đã tồn tại trong hệ thống")
+    @Transactional
+    void TC_INVENTORY_025_completePurchaseOrder_duplicateSerial() {
+        Supplier supplier = createTestSupplier("CPO04");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-CPO-004", supplier);
 
-        /**
-         * TC_INV_001
-         * Objective : getAllSuppliers trả về danh sách đầy đủ
-         * Input     : Repository có sẵn danh sách 2 supplier
-         * Expected  : Response thành công, size = 2
-         */
-        @Test
-        @DisplayName("TC_INV_001 – Trả về danh sách nhà cung cấp khi có dữ liệu")
-        void TC_INV_001_getAllSuppliers_WithData_ReturnsList() {
-            Supplier s2 = Supplier.builder().id(2L).name("NCC B")
-                    .taxCode("9999999999").active(true).autoCreated(false).build();
-            when(supplierRepository.findAll()).thenReturn(Arrays.asList(supplier, s2));
+        // Tạo sẵn serial trùng
+        createTestProductDetail("SN-DUP-EXIST", wp, ProductStatus.IN_STOCK, 1000000.0);
 
-            ApiResponse response = inventoryService.getAllSuppliers();
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-DUPSER-004")
+                .supplier(supplier)
+                .status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now())
+                .build();
 
-            assertTrue(response.isSuccess(), "Response phải thành công");
-            @SuppressWarnings("unchecked")
-            List<Supplier> data = (List<Supplier>) response.getData();
-            assertEquals(2, data.size(), "Phải trả về đúng số nhà cung cấp");
-        }
+        PurchaseOrderItem item = PurchaseOrderItem.builder()
+                .purchaseOrder(po)
+                .sku("SKU-CPO-004")
+                .warehouseProduct(wp)
+                .quantity(1L)
+                .unitCost(1000000.0)
+                .warrantyMonths(12)
+                .build();
 
-        /**
-         * TC_INV_002
-         * Objective : getAllSuppliers khi không có NCC nào
-         * Input     : Empty list
-         * Expected  : Response thành công, danh sách rỗng (không null, không lỗi)
-         */
-        @Test
-        @DisplayName("TC_INV_002 – Trả về list rỗng (không null) khi không có NCC")
-        void TC_INV_002_getAllSuppliers_EmptyDB_ReturnsEmptyNotNull() {
-            when(supplierRepository.findAll()).thenReturn(Collections.emptyList());
+        po.setItems(List.of(item));
+        purchaseOrderRepository.save(po);
+        long detailBefore = productDetailRepository.count();
 
-            ApiResponse response = inventoryService.getAllSuppliers();
+        ProductSerialRequest serialReq = new ProductSerialRequest();
+        serialReq.setProductSku("SKU-CPO-004");
+        serialReq.setSerialNumbers(List.of("SN-DUP-EXIST")); // serial đã tồn tại
 
-            assertTrue(response.isSuccess(), "Response phải thành công dù list rỗng");
-            assertNotNull(response.getData(), "Data không được null khi list rỗng");
-            @SuppressWarnings("unchecked")
-            List<Supplier> data = (List<Supplier>) response.getData();
-            assertTrue(data.isEmpty(), "Phải trả về list rỗng");
-        }
+        CompletePORequest req = new CompletePORequest();
+        req.setPoId(po.getId());
+        req.setSerials(List.of(serialReq));
+
+        assertThatThrownBy(() -> inventoryService.completePurchaseOrder(req))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Serial")
+                .hasMessageContaining("đã tồn tại");
+
+        // DB không thay đổi (rollback thành công)
+        assertThat(productDetailRepository.count()).isEqualTo(detailBefore);
     }
 
-    // ================================================================
-    // TC_INV_003 → TC_INV_010: getOrCreateSupplier
-    // ================================================================
-    @Nested
-    @DisplayName("getOrCreateSupplier Tests")
-    class GetOrCreateSupplierTests {
+    @Test
+    @DisplayName("TC_INVENTORY_026 - Hoàn tất nhập hàng thất bại khi serial rỗng")
+    @Transactional
+    void TC_INVENTORY_026_completePurchaseOrder_emptySerial() {
+        Supplier supplier = createTestSupplier("CPO05");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-CPO-005", supplier);
 
-        /**
-         * TC_INV_003
-         * Objective : Tìm thấy NCC qua taxCode → không tạo mới
-         * Input     : taxCode = "0123456789" đã tồn tại
-         * Expected  : Trả về NCC cũ, KHÔNG gọi save
-         */
-        @Test
-        @DisplayName("TC_INV_003 – Tìm NCC qua taxCode đã tồn tại, không tạo mới")
-        void TC_INV_003_getOrCreateSupplier_ExistingTaxCode_ReturnExistingNoSave() {
-            CreateSupplierRequest req = new CreateSupplierRequest();
-            req.setTaxCode("0123456789");
-            when(supplierRepository.findByTaxCode("0123456789")).thenReturn(Optional.of(supplier));
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-EMPTYSER-005")
+                .supplier(supplier)
+                .status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now())
+                .build();
 
-            ApiResponse response = inventoryService.getOrCreateSupplier(req);
+        PurchaseOrderItem item = PurchaseOrderItem.builder()
+                .purchaseOrder(po)
+                .sku("SKU-CPO-005")
+                .warehouseProduct(wp)
+                .quantity(1L)
+                .unitCost(1000000.0)
+                .warrantyMonths(12)
+                .build();
 
-            assertTrue(response.isSuccess());
-            assertEquals(supplier, response.getData(), "Phải trả về đúng NCC cũ");
-            verify(supplierRepository, never()).save(any());
-        }
+        po.setItems(List.of(item));
+        purchaseOrderRepository.save(po);
+        long detailBefore = productDetailRepository.count();
 
-        /**
-         * TC_INV_004
-         * Objective : Tìm thấy NCC qua email (taxCode null)
-         * Input     : taxCode null, email "ncc@test.com" đã tồn tại
-         * Expected  : Trả về NCC cũ qua email, KHÔNG tạo mới
-         *
-         * ⚠️ BUG HUNTER: Nếu hệ thống bỏ qua kiểm tra email khi taxCode null → sẽ tạo NCC trùng
-         */
-        @Test
-        @DisplayName("TC_INV_004 – Tìm NCC qua email khi taxCode null, không tạo mới")
-        void TC_INV_004_getOrCreateSupplier_NullTaxCodeExistingEmail_ReturnExistingNoSave() {
-            CreateSupplierRequest req = new CreateSupplierRequest();
-            req.setTaxCode(null); // taxCode null
-            req.setEmail("ncc@test.com");
-            when(supplierRepository.findByEmail("ncc@test.com")).thenReturn(Optional.of(supplier));
+        ProductSerialRequest serialReq = new ProductSerialRequest();
+        serialReq.setProductSku("SKU-CPO-005");
+        serialReq.setSerialNumbers(List.of("")); // serial trống
 
-            ApiResponse response = inventoryService.getOrCreateSupplier(req);
+        CompletePORequest req = new CompletePORequest();
+        req.setPoId(po.getId());
+        req.setSerials(List.of(serialReq));
 
-            assertTrue(response.isSuccess());
-            assertEquals(supplier, response.getData(), "Phải tìm thấy NCC qua email khi không có taxCode");
-            verify(supplierRepository, never()).save(any());
-        }
+        assertThatThrownBy(() -> inventoryService.completePurchaseOrder(req))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Serial không được để trống");
 
-        /**
-         * TC_INV_005
-         * Objective : Tất cả fields đặc định đều null → phải tạo NCC mới
-         * Input     : taxCode null, email null, phone null, name = "NCC Mới"
-         * Expected  : Tạo và lưu NCC mới thành công
-         */
-        @Test
-        @DisplayName("TC_INV_005 – Tạo NCC mới khi không tồn tại taxCode/email/phone")
-        void TC_INV_005_getOrCreateSupplier_NoMatch_CreatesNewSupplier() {
-            CreateSupplierRequest req = new CreateSupplierRequest();
-            req.setTaxCode(null);
-            req.setEmail(null);
-            req.setPhone(null);
-            req.setName("NCC Mới");
-            when(supplierRepository.save(any())).thenReturn(supplier);
-
-            ApiResponse response = inventoryService.getOrCreateSupplier(req);
-
-            assertTrue(response.isSuccess());
-            verify(supplierRepository, times(1)).save(any());
-        }
-
-        /**
-         * TC_INV_006
-         * Objective : Request hoàn toàn null → phải xử lý graceful
-         * Input     : CreateSupplierRequest có tất cả null và name null
-         * Expected  : Không exception hoặc trả về error response rõ ràng
-         *
-         * ⚠️ BUG HUNTER: Nếu code gọi name khi null → NullPointerException
-         */
-        @Test
-        @DisplayName("TC_INV_006 – Request với tất cả field null không gây NullPointerException")
-        void TC_INV_006_getOrCreateSupplier_AllNullFields_NoNPE() {
-            CreateSupplierRequest req = new CreateSupplierRequest();
-            // Tất cả fields đều null
-            when(supplierRepository.save(any())).thenReturn(supplier);
-
-            // Nghiệp vụ: không được crash, phải xử lý graceful
-            assertDoesNotThrow(() -> inventoryService.getOrCreateSupplier(req),
-                    "Không được ném NullPointerException khi tất cả fields null");
-        }
+        assertThat(productDetailRepository.count()).isEqualTo(detailBefore);
     }
 
-    // ================================================================
-    // TC_INV_007 → TC_INV_011: createWarehouseProduct
-    // ================================================================
-    @Nested
-    @DisplayName("createWarehouseProduct Tests")
-    class CreateWarehouseProductTests {
+    @Test
+    @DisplayName("TC_INVENTORY_027 - Hoàn tất nhập hàng thất bại khi SKU không thuộc phiếu nhập")
+    @Transactional
+    void TC_INVENTORY_027_completePurchaseOrder_skuNotInPO() {
+        Supplier supplier = createTestSupplier("CPO06");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-CPO-006", supplier);
 
-        /**
-         * TC_INV_007
-         * Objective : Tạo sản phẩm kho với SKU hoàn toàn mới
-         * Input     : SKU = "SKU-NEW-999", chưa tồn tại trong DB
-         * Expected  : Tạo thành công, gọi save, gọi parseAndSaveSpecs
-         */
-        @Test
-        @DisplayName("TC_INV_007 – Tạo sản phẩm kho với SKU mới thành công")
-        void TC_INV_007_createWarehouseProduct_NewSku_SavedAndSpecsParsed() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-NEW-999");
-            req.setInternalName("Laptop Pro Z");
-            req.setDescription("Máy tính mới");
-            req.setTechSpecsJson("{\"ram\":\"32GB\"}");
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-WRONGSKU-006")
+                .supplier(supplier)
+                .status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now())
+                .build();
 
-            when(warehouseProductRepository.findBySku("SKU-NEW-999")).thenReturn(Optional.empty());
-            when(warehouseProductRepository.save(any())).thenReturn(warehouseProduct);
-            doNothing().when(productSpecificationService).parseAndSaveSpecs(any());
+        PurchaseOrderItem item = PurchaseOrderItem.builder()
+                .purchaseOrder(po)
+                .sku("SKU-CPO-006")
+                .warehouseProduct(wp)
+                .quantity(1L)
+                .unitCost(1000000.0)
+                .warrantyMonths(12)
+                .build();
 
-            ApiResponse response = inventoryService.createWarehouseProduct(req);
+        po.setItems(List.of(item));
+        purchaseOrderRepository.save(po);
 
-            assertTrue(response.isSuccess(), "Tạo sản phẩm mới phải thành công");
-            verify(warehouseProductRepository).save(any());
-            verify(productSpecificationService).parseAndSaveSpecs(any());
-        }
+        ProductSerialRequest serialReq = new ProductSerialRequest();
+        serialReq.setProductSku("SKU-WRONG-999"); // SKU không thuộc PO này
+        serialReq.setSerialNumbers(List.of("SN-WRONG-001"));
 
-        /**
-         * TC_INV_008
-         * Objective : Tạo sản phẩm kho với SKU trùng → phải từ chối
-         * Input     : SKU = "SKU-LAPTOP-001" đã tồn tại
-         * Expected  : Response lỗi, KHÔNG gọi save
-         *
-         * ⚠️ BUG HUNTER: Nếu không check duplicate SKU → tạo trùng lặp, vi phạm unique constraint
-         */
-        @Test
-        @DisplayName("TC_INV_008 – Từ chối tạo sản phẩm khi SKU đã tồn tại")
-        void TC_INV_008_createWarehouseProduct_DuplicateSku_ReturnsError() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-LAPTOP-001"); // đã tồn tại
-            req.setInternalName("Laptop Clone");
+        CompletePORequest req = new CompletePORequest();
+        req.setPoId(po.getId());
+        req.setSerials(List.of(serialReq));
 
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001"))
-                    .thenReturn(Optional.of(warehouseProduct));
-
-            ApiResponse response = inventoryService.createWarehouseProduct(req);
-
-            assertFalse(response.isSuccess(), "Phải trả về lỗi khi SKU trùng");
-            verify(warehouseProductRepository, never()).save(any());
-            verify(productSpecificationService, never()).parseAndSaveSpecs(any());
-        }
-
-        /**
-         * TC_INV_009
-         * Objective : techSpecsJson null → mặc định dùng "{}"
-         * Input     : techSpecsJson = null
-         * Expected  : Sản phẩm được tạo với techSpecsJson = "{}" chứ không null
-         *
-         * ⚠️ BUG HUNTER: Nếu lưu null vào cột JSON → có thể gây lỗi parse sau này
-         */
-        @Test
-        @DisplayName("TC_INV_009 – techSpecsJson null phải mặc định là '{}'")
-        void TC_INV_009_createWarehouseProduct_NullTechSpecs_DefaultsToEmptyJson() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-NO-SPECS");
-            req.setInternalName("Product No Specs");
-            req.setTechSpecsJson(null); // null
-
-            when(warehouseProductRepository.findBySku("SKU-NO-SPECS")).thenReturn(Optional.empty());
-            when(warehouseProductRepository.save(any())).thenAnswer(inv -> {
-                WarehouseProduct saved = inv.getArgument(0);
-                // Nghiệp vụ: techSpecsJson phải là "{}" chứ không phải null
-                assertNotNull(saved.getTechSpecsJson(),
-                        "techSpecsJson không được null khi input null, phải dùng '{}'");
-                assertEquals("{}", saved.getTechSpecsJson(),
-                        "techSpecsJson phải là '{}' khi input null");
-                return saved;
-            });
-            doNothing().when(productSpecificationService).parseAndSaveSpecs(any());
-
-            inventoryService.createWarehouseProduct(req);
-            verify(warehouseProductRepository).save(any());
-        }
-
-        /**
-         * TC_INV_010
-         * Objective : supplierId không tồn tại → phải ném exception
-         * Input     : supplierId = 999L không có trong DB
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_010 – supplierId không tồn tại phải ném exception")
-        void TC_INV_010_createWarehouseProduct_InvalidSupplierId_ThrowsException() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-VALID-NEW");
-            req.setInternalName("Valid Product");
-            req.setSupplierId(999L); // không tồn tại
-
-            when(warehouseProductRepository.findBySku("SKU-VALID-NEW")).thenReturn(Optional.empty());
-            when(supplierRepository.findById(999L)).thenReturn(Optional.empty());
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.createWarehouseProduct(req),
-                    "Phải ném exception khi supplierId không tồn tại");
-        }
-
-        /**
-         * TC_INV_011
-         * Objective : SKU rỗng ("") → phải từ chối theo nghiệp vụ
-         * Input     : sku = ""
-         * Expected  : Không được tạo sản phẩm với SKU rỗng
-         *
-         * ⚠️ BUG HUNTER: @NotBlank chỉ validate ở Controller layer, không ở Service
-         */
-        @Test
-        @DisplayName("TC_INV_011 – SKU rỗng không nên tạo sản phẩm (edge case)")
-        void TC_INV_011_createWarehouseProduct_EmptySku_ShouldRejectOrHandle() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku(""); // SKU rỗng
-            req.setInternalName("Product Empty SKU");
-
-            when(warehouseProductRepository.findBySku("")).thenReturn(Optional.empty());
-            when(warehouseProductRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            doNothing().when(productSpecificationService).parseAndSaveSpecs(any());
-
-            // Nghiệp vụ: SKU rỗng là dữ liệu không hợp lệ
-            // Kỳ vọng: Trả về error hoặc ném exception
-            // Nếu code tạo thành công với SKU="" → đây là BUG
-            ApiResponse response = inventoryService.createWarehouseProduct(req);
-            if (response.isSuccess()) {
-                // Mark as potential bug: SKU rỗng được chấp nhận ở tầng service
-                System.out.println("[BUG DETECTED] TC_INV_011: Service chấp nhận SKU rỗng - thiếu validation ở tầng service");
-            }
-        }
+        assertThatThrownBy(() -> inventoryService.completePurchaseOrder(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không thuộc phiếu nhập");
     }
 
-    // ================================================================
-    // TC_INV_012 → TC_INV_016: updateWarehouseProduct
-    // ================================================================
-    @Nested
-    @DisplayName("updateWarehouseProduct Tests")
-    class UpdateWarehouseProductTests {
+    // =========================================================
+    // *** TEST GROUP 7: createExportOrder ***
+    // Mục đích: Kiểm tra xuất kho thủ công (không phải bán hàng)
+    // =========================================================
 
-        /**
-         * TC_INV_012
-         * Objective : Cập nhật sản phẩm không tồn tại
-         * Input     : id = 9999L không có trong DB
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_012 – Update sản phẩm không tồn tại phải ném exception")
-        void TC_INV_012_updateWarehouseProduct_NonExistentId_ThrowsException() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-999");
-            req.setInternalName("Ghost Product");
+    @Test
+    @DisplayName("TC_INVENTORY_028 - Xuất kho thủ công thành công")
+    @Transactional
+    void TC_INVENTORY_028_createExportOrder_success() {
+        Supplier supplier = createTestSupplier("EXP01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-EXP-001", supplier);
+        createTestProductDetail("SN-EXP-001", wp, ProductStatus.IN_STOCK, 2000000.0);
+        createTestStock(wp, 1L, 0L);
+        long exportBefore = exportOrderRepository.count();
 
-            when(warehouseProductRepository.findById(9999L)).thenReturn(Optional.empty());
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-EXP-001");
+        itemReq.setSerialNumbers(List.of("SN-EXP-001"));
 
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.updateWarehouseProduct(9999L, req),
-                    "Phải ném exception khi ID không tồn tại");
-        }
+        CreateExportOrderRequest req = new CreateExportOrderRequest();
+        req.setCreatedBy("warehouse_staff");
+        req.setReason("Xuất để kiểm kho");
+        req.setNote("Test xuất kho");
+        req.setItems(List.of(itemReq));
 
-        /**
-         * TC_INV_013
-         * Objective : Đổi SKU sang SKU đã tồn tại của sản phẩm khác → từ chối
-         * Input     : id = 10L, newSku = "SKU-EXISTING-002" đã có ở sản phẩm khác
-         * Expected  : Response lỗi, không lưu
-         */
-        @Test
-        @DisplayName("TC_INV_013 – Đổi SKU sang giá trị đã tồn tại phải trả về lỗi")
-        void TC_INV_013_updateWarehouseProduct_SkuConflict_ReturnsError() {
-            WarehouseProduct anotherProduct = WarehouseProduct.builder()
-                    .id(20L).sku("SKU-EXISTING-002").internalName("Other Product").build();
+        ApiResponse response = inventoryService.createExportOrder(req);
 
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-EXISTING-002"); // SKU của sản phẩm khác
-            req.setInternalName("Updated Name");
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Xuất kho thành công!");
 
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(warehouseProduct));
-            when(warehouseProductRepository.findBySku("SKU-EXISTING-002"))
-                    .thenReturn(Optional.of(anotherProduct));
+        // Kiểm tra phiếu xuất được tạo
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore + 1);
 
-            ApiResponse response = inventoryService.updateWarehouseProduct(10L, req);
+        // Kiểm tra serial đã chuyển sang SOLD
+        ProductDetail pd = productDetailRepository.findBySerialNumber("SN-EXP-001").orElseThrow();
+        assertThat(pd.getStatus()).isEqualTo(ProductStatus.SOLD);
+        assertThat(pd.getSoldDate()).isNotNull();
 
-            assertFalse(response.isSuccess(), "Phải từ chối khi SKU mới đã tồn tại");
-            verify(warehouseProductRepository, never()).save(any());
-        }
-
-        /**
-         * TC_INV_014
-         * Objective : Cập nhật giữ nguyên SKU → không cần check duplicate
-         * Input     : id = 10L, SKU giữ nguyên = "SKU-LAPTOP-001"
-         * Expected  : Update thành công
-         */
-        @Test
-        @DisplayName("TC_INV_014 – Update giữ nguyên SKU phải thành công")
-        void TC_INV_014_updateWarehouseProduct_SameSku_UpdatesSuccessfully() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-LAPTOP-001"); // Giữ nguyên SKU cũ
-            req.setInternalName("Laptop Gaming X Updated");
-            req.setDescription("Mô tả mới");
-
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(warehouseProduct));
-            when(warehouseProductRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            doNothing().when(productSpecificationService).parseAndSaveSpecs(any());
-
-            ApiResponse response = inventoryService.updateWarehouseProduct(10L, req);
-
-            assertTrue(response.isSuccess(), "Update với SKU không đổi phải thành công");
-        }
+        // Kiểm tra tồn kho giảm xuống 0
+        InventoryStock stock = inventoryStockRepository.findByWarehouseProduct_Id(wp.getId()).orElseThrow();
+        assertThat(stock.getOnHand()).isEqualTo(0L);
     }
 
-    // ================================================================
-    // TC_INV_015 → TC_INV_022: createPurchaseOrder
-    // ================================================================
-    @Nested
-    @DisplayName("createPurchaseOrder Tests")
-    class CreatePurchaseOrderTests {
+    @Test
+    @DisplayName("TC_INVENTORY_029 - Xuất kho thất bại khi không đủ hàng trong kho")
+    @Transactional
+    void TC_INVENTORY_029_createExportOrder_insufficientStock() {
+        Supplier supplier = createTestSupplier("EXP02");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-EXP-002", supplier);
+        createTestProductDetail("SN-EXP-002", wp, ProductStatus.IN_STOCK, 1000000.0);
+        createTestStock(wp, 0L, 0L); // tồn kho = 0
+        long exportBefore = exportOrderRepository.count();
 
-        /**
-         * TC_INV_015
-         * Objective : Tạo PO với supplier đã có trong DB (tìm qua taxCode)
-         * Input     : taxCode = "0123456789" đã tồn tại, items hợp lệ
-         * Expected  : PO được tạo, không tạo supplier mới
-         */
-        @Test
-        @DisplayName("TC_INV_015 – Tạo PO với supplier đã tồn tại theo taxCode")
-        void TC_INV_015_createPurchaseOrder_ExistingSupplier_SkipCreateSupplier() {
-            POItemRequest item = buildPoItem("SKU-LAPTOP-001", 5L, 15_000_000.0);
-            CreatePORequest req = buildCreatePORequest("PO-2024-TEST", "0123456789",
-                    Collections.singletonList(item));
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-EXP-002");
+        itemReq.setSerialNumbers(List.of("SN-EXP-002"));
 
-            when(supplierRepository.findByTaxCode("0123456789")).thenReturn(Optional.of(supplier));
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001"))
-                    .thenReturn(Optional.of(warehouseProduct));
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
+        CreateExportOrderRequest req = new CreateExportOrderRequest();
+        req.setCreatedBy("staff");
+        req.setItems(List.of(itemReq));
 
-            ApiResponse response = inventoryService.createPurchaseOrder(req);
+        assertThatThrownBy(() -> inventoryService.createExportOrder(req))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Không đủ hàng trong kho");
 
-            assertTrue(response.isSuccess(), "Tạo PO với supplier cũ phải thành công");
-            // Không nên tạo supplier mới
-            verify(supplierRepository, never()).save(any());
-        }
+        // Phiếu xuất không được tạo
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore);
 
-        /**
-         * TC_INV_016
-         * Objective : Tạo PO không có supplier (null) → phải ném exception
-         * Input     : supplier = null trong request
-         * Expected  : IllegalArgumentException vì thiếu thông tin supplier
-         */
-        @Test
-        @DisplayName("TC_INV_016 – PO thiếu supplier phải ném IllegalArgumentException")
-        void TC_INV_016_createPurchaseOrder_NullSupplier_ThrowsException() {
-            CreatePORequest req = new CreatePORequest();
-            req.setPoCode("PO-NO-SUPPLIER");
-            req.setCreatedBy("admin");
-            req.setSupplier(null); // null supplier
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.createPurchaseOrder(req),
-                    "Phải ném exception khi supplier null");
-            verify(purchaseOrderRepository, never()).save(any());
-        }
-
-        /**
-         * TC_INV_017
-         * Objective : Tạo PO với supplier có taxCode = null → phải ném exception
-         * Input     : supplier.taxCode = null
-         * Expected  : IllegalArgumentException
-         *
-         * ⚠️ BUG HUNTER: Nghiệp vụ yêu cầu taxCode để định danh NCC
-         */
-        @Test
-        @DisplayName("TC_INV_017 – PO với supplier.taxCode null phải ném exception")
-        void TC_INV_017_createPurchaseOrder_NullTaxCode_ThrowsException() {
-            CreateSupplierRequest supplierReq = new CreateSupplierRequest();
-            supplierReq.setTaxCode(null); // taxCode null
-
-            CreatePORequest req = new CreatePORequest();
-            req.setPoCode("PO-NO-TAX");
-            req.setCreatedBy("admin");
-            req.setSupplier(supplierReq);
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.createPurchaseOrder(req),
-                    "Phải ném exception khi taxCode null");
-        }
-
-        /**
-         * TC_INV_018
-         * Objective : Tạo PO với unit cost âm → nghiệp vụ không cho phép
-         * Input     : unitCost = -1000.0
-         * Expected  : Lỗi hoặc exception (giá âm vô nghĩa trong kho)
-         *
-         * ⚠️ BUG HUNTER: @Positive chỉ ở Controller layer, không ở Service logic
-         */
-        @Test
-        @DisplayName("TC_INV_018 – PO với unitCost âm là dữ liệu không hợp lệ")
-        void TC_INV_018_createPurchaseOrder_NegativeUnitCost_ShouldReject() {
-            POItemRequest item = buildPoItem("SKU-CHEAP", 1L, -1000.0); // giá âm
-            CreatePORequest req = buildCreatePORequest("PO-NEGATIVE-COST", "0123456789",
-                    Collections.singletonList(item));
-
-            when(supplierRepository.findByTaxCode("0123456789")).thenReturn(Optional.of(supplier));
-            when(warehouseProductRepository.findBySku("SKU-CHEAP")).thenReturn(Optional.empty());
-            when(warehouseProductRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
-            doNothing().when(productSpecificationService).parseAndSaveSpecs(any());
-
-            // Nghiệp vụ: Giá nhập âm không có nghĩa, phải từ chối
-            ApiResponse response = inventoryService.createPurchaseOrder(req);
-            if (response.isSuccess()) {
-                System.out.println("[BUG DETECTED] TC_INV_018: Service chấp nhận unitCost âm = " + item.getUnitCost());
-            }
-        }
-
-        /**
-         * TC_INV_019
-         * Objective : Tạo PO với số lượng = 0 → nghiệp vụ không hợp lệ
-         * Input     : quantity = 0
-         * Expected  : Lỗi vì đặt hàng 0 sản phẩm vô nghĩa
-         */
-        @Test
-        @DisplayName("TC_INV_019 – PO với quantity 0 là dữ liệu bất hợp lệ")
-        void TC_INV_019_createPurchaseOrder_ZeroQuantity_ShouldReject() {
-            POItemRequest item = buildPoItem("SKU-ZERO-QTY", 0L, 5000.0); // qty = 0
-            CreatePORequest req = buildCreatePORequest("PO-ZERO-QTY", "0123456789",
-                    Collections.singletonList(item));
-
-            when(supplierRepository.findByTaxCode("0123456789")).thenReturn(Optional.of(supplier));
-            when(warehouseProductRepository.findBySku("SKU-ZERO-QTY")).thenReturn(Optional.empty());
-            when(warehouseProductRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
-            doNothing().when(productSpecificationService).parseAndSaveSpecs(any());
-
-            ApiResponse response = inventoryService.createPurchaseOrder(req);
-            if (response.isSuccess()) {
-                System.out.println("[BUG DETECTED] TC_INV_019: Service chấp nhận quantity = 0");
-            }
-        }
+        // Serial không bị thay đổi trạng thái
+        ProductDetail pd = productDetailRepository.findBySerialNumber("SN-EXP-002").orElseThrow();
+        assertThat(pd.getStatus()).isEqualTo(ProductStatus.IN_STOCK);
     }
 
-    // ================================================================
-    // TC_INV_020 → TC_INV_028: completePurchaseOrder
-    // ================================================================
-    @Nested
-    @DisplayName("completePurchaseOrder Tests")
-    class CompletePurchaseOrderTests {
+    @Test
+    @DisplayName("TC_INVENTORY_030 - Xuất kho thất bại khi SKU không tồn tại")
+    @Transactional
+    void TC_INVENTORY_030_createExportOrder_skuNotFound() {
+        long exportBefore = exportOrderRepository.count();
 
-        /**
-         * TC_INV_020
-         * Objective : PO không tồn tại → phải ném exception
-         * Input     : poId = 9999L không có trong DB
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_020 – Complete PO không tồn tại phải ném exception")
-        void TC_INV_020_completePO_NonExistentPO_ThrowsException() {
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(9999L);
-            req.setSerials(Collections.emptyList());
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-NOT-EXIST-999");
+        itemReq.setSerialNumbers(List.of("SN-ANY-001"));
 
-            when(purchaseOrderRepository.findById(9999L)).thenReturn(Optional.empty());
+        CreateExportOrderRequest req = new CreateExportOrderRequest();
+        req.setItems(List.of(itemReq));
 
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.completePurchaseOrder(req),
-                    "Phải ném exception khi PO không tồn tại");
-        }
+        assertThatThrownBy(() -> inventoryService.createExportOrder(req))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Không tìm thấy sản phẩm SKU");
 
-        /**
-         * TC_INV_021
-         * Objective : PO đã ở trạng thái RECEIVED → không được nhập lại
-         * Input     : PO với status = RECEIVED
-         * Expected  : Response lỗi (không cho nhập hàng lần 2)
-         *
-         * ⚠️ BUG HUNTER: Nghiệp vụ quan trọng – nhập hàng 2 lần sẽ tăng kho ảo
-         */
-        @Test
-        @DisplayName("TC_INV_021 – Không cho phép complete PO đã RECEIVED")
-        void TC_INV_021_completePO_AlreadyReceived_ReturnsError() {
-            purchaseOrder.setStatus(POStatus.RECEIVED);
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setSerials(Collections.emptyList());
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-
-            ApiResponse response = inventoryService.completePurchaseOrder(req);
-
-            assertFalse(response.isSuccess(), "Phải từ chối complete PO đã RECEIVED");
-            verify(inventoryStockRepository, never()).save(any());
-        }
-
-        /**
-         * TC_INV_022
-         * Objective : PO đã CANCELLED → không cho phép nhập hàng
-         * Input     : PO với status = CANCELLED
-         * Expected  : Response lỗi
-         */
-        @Test
-        @DisplayName("TC_INV_022 – Không cho phép complete PO đã CANCELLED")
-        void TC_INV_022_completePO_Cancelled_ReturnsError() {
-            purchaseOrder.setStatus(POStatus.CANCELLED);
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setSerials(Collections.emptyList());
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-
-            ApiResponse response = inventoryService.completePurchaseOrder(req);
-
-            assertFalse(response.isSuccess(), "Phải từ chối complete PO đã CANCELLED");
-        }
-
-        /**
-         * TC_INV_023
-         * Objective : Serial trùng lặp trong DB → phải từ chối
-         * Input     : serial "SN-DUP-001" đã tồn tại trong productDetailRepository
-         * Expected  : RuntimeException
-         *
-         * ⚠️ BUG HUNTER: Dữ liệu quan trọng nhất – serial phải unique toàn hệ thống
-         */
-        @Test
-        @DisplayName("TC_INV_023 – Serial trùng lặp trong DB phải bị từ chối")
-        void TC_INV_023_completePO_DuplicateSerial_ThrowsException() {
-            PurchaseOrderItem poItem = buildPoItem_Entity("SKU-LAPTOP-001", 1L);
-            purchaseOrder.setItems(Collections.singletonList(poItem));
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(Collections.singletonList("SN-DUP-001"));
-
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setSerials(Collections.singletonList(serialReq));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            // Serial đã tồn tại trong DB
-            when(productDetailRepository.existsBySerialNumber("SN-DUP-001")).thenReturn(true);
-
-            assertThrows(RuntimeException.class,
-                    () -> inventoryService.completePurchaseOrder(req),
-                    "Phải ném exception khi serial đã tồn tại trong DB");
-        }
-
-        /**
-         * TC_INV_024
-         * Objective : Số lượng serial không khớp số lượng PO → phải từ chối
-         * Input     : PO đặt 3 sản phẩm nhưng nhập 2 serial
-         * Expected  : RuntimeException – số serial không khớp số lượng đặt
-         *
-         * ⚠️ BUG HUNTER: Nghiệp vụ quan trọng – nhập thiếu hàng không được phép
-         */
-        @Test
-        @DisplayName("TC_INV_024 – Số serial không khớp số lượng PO phải bị từ chối")
-        void TC_INV_024_completePO_SerialCountMismatch_ThrowsException() {
-            // PO đặt 3 sản phẩm
-            PurchaseOrderItem poItem = buildPoItem_Entity("SKU-LAPTOP-001", 3L);
-            purchaseOrder.setItems(Collections.singletonList(poItem));
-
-            // Nhưng chỉ nhập 2 serial
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(Arrays.asList("SN001", "SN002")); // chỉ 2
-
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setSerials(Collections.singletonList(serialReq));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            // Không stub existsBySerialNumber vì exception ném trước khi gọi tới đó
-
-            assertThrows(RuntimeException.class,
-                    () -> inventoryService.completePurchaseOrder(req),
-                    "Phải ném exception khi số serial (2) không khớp số lượng PO (3)");
-        }
-
-        /**
-         * TC_INV_025
-         * Objective : Serial rỗng ("") trong danh sách → phải từ chối
-         * Input     : Serial list có chứa chuỗi rỗng ""
-         * Expected  : RuntimeException vì serial không hợp lệ
-         */
-        @Test
-        @DisplayName("TC_INV_025 – Serial rỗng trong danh sách phải bị từ chối")
-        void TC_INV_025_completePO_EmptySerial_ThrowsException() {
-            PurchaseOrderItem poItem = buildPoItem_Entity("SKU-LAPTOP-001", 2L);
-            purchaseOrder.setItems(Collections.singletonList(poItem));
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(Arrays.asList("SN001", "")); // serial rỗng
-
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setSerials(Collections.singletonList(serialReq));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber("SN001")).thenReturn(false);
-
-            assertThrows(RuntimeException.class,
-                    () -> inventoryService.completePurchaseOrder(req),
-                    "Phải ném exception khi có serial rỗng trong danh sách");
-        }
-
-        /**
-         * TC_INV_026
-         * Objective : SKU trong serial request không thuộc PO → phải báo lỗi rõ ràng
-         * Input     : SKU "SKU-WRONG" không có trong items của PO "PO-2024-001"
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_026 – SKU không thuộc PO phải ném exception")
-        void TC_INV_026_completePO_SkuNotInPO_ThrowsException() {
-            PurchaseOrderItem poItem = buildPoItem_Entity("SKU-LAPTOP-001", 1L);
-            purchaseOrder.setItems(Collections.singletonList(poItem));
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-WRONG"); // không có trong PO
-            serialReq.setSerialNumbers(Collections.singletonList("SN001"));
-
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setSerials(Collections.singletonList(serialReq));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.completePurchaseOrder(req),
-                    "Phải ném exception khi SKU không thuộc PO");
-        }
-
-        /**
-         * TC_INV_027
-         * Objective : Complete PO thành công → inventory stock phải tăng đúng
-         * Input     : PO 2 items: [SN001, SN002]; stock ban đầu onHand = 50
-         * Expected  : onHand sau = 52, status PO = RECEIVED
-         *
-         * CheckDB: Verify inventoryStockRepository.save() được gọi với onHand mới
-         */
-        @Test
-        @DisplayName("TC_INV_027 – Complete PO thành công tăng inventory stock đúng số lượng")
-        void TC_INV_027_completePO_ValidData_StockIncreasedCorrectly() {
-            PurchaseOrderItem poItem = buildPoItem_Entity("SKU-LAPTOP-001", 2L);
-            purchaseOrder.setItems(Collections.singletonList(poItem));
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(Arrays.asList("SN-NEW-001", "SN-NEW-002"));
-
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setSerials(Collections.singletonList(serialReq));
-            req.setReceivedDate(LocalDateTime.now());
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber(any())).thenReturn(false);
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-            when(inventoryStockRepository.save(any())).thenAnswer(inv -> {
-                InventoryStock saved = inv.getArgument(0);
-                // CheckDB: onHand phải tăng từ 50 lên 52 (thêm 2 serial)
-                assertTrue(saved.getOnHand() >= 50L + 2L,
-                        "onHand phải tăng: kỳ vọng >= 52, thực tế = " + saved.getOnHand());
-                return saved;
-            });
-            when(purchaseOrderRepository.save(any())).thenAnswer(inv -> {
-                PurchaseOrder savedPO = inv.getArgument(0);
-                assertEquals(POStatus.RECEIVED, savedPO.getStatus(),
-                        "Status PO phải là RECEIVED sau khi complete");
-                return savedPO;
-            });
-            when(supplierPayableService.createPayableFromPurchaseOrder(any()))
-                    .thenReturn(ApiResponse.success("OK", null));
-
-            ApiResponse response = inventoryService.completePurchaseOrder(req);
-
-            assertTrue(response.isSuccess(), "Complete PO với dữ liệu hợp lệ phải thành công");
-            verify(inventoryStockRepository, times(1)).save(any());
-            verify(purchaseOrderRepository, times(1)).save(any());
-        }
-
-        /**
-         * TC_INV_028
-         * Objective : Nhập serial null trong danh sách → phải từ chối
-         * Input     : serialNumbers chứa null
-         * Expected  : RuntimeException vì serial null là bất hợp lệ
-         */
-        @Test
-        @DisplayName("TC_INV_028 – Serial null trong danh sách phải bị từ chối")
-        void TC_INV_028_completePO_NullSerial_ThrowsException() {
-            PurchaseOrderItem poItem = buildPoItem_Entity("SKU-LAPTOP-001", 2L);
-            purchaseOrder.setItems(Collections.singletonList(poItem));
-
-            List<String> serialsWithNull = new ArrayList<>();
-            serialsWithNull.add("SN001");
-            serialsWithNull.add(null); // null serial
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(serialsWithNull);
-
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setSerials(Collections.singletonList(serialReq));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber("SN001")).thenReturn(false);
-
-            assertThrows(RuntimeException.class,
-                    () -> inventoryService.completePurchaseOrder(req),
-                    "Phải ném exception khi serial null trong danh sách");
-        }
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore);
     }
 
-    // ================================================================
-    // TC_INV_029 → TC_INV_035: cancelPurchaseOrder
-    // ================================================================
-    @Nested
-    @DisplayName("cancelPurchaseOrder Tests")
-    class CancelPurchaseOrderTests {
+    @Test
+    @DisplayName("TC_INVENTORY_031 - Xuất kho thất bại khi serial không ở trạng thái IN_STOCK")
+    @Transactional
+    void TC_INVENTORY_031_createExportOrder_serialNotInStock() {
+        Supplier supplier = createTestSupplier("EXP03");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-EXP-003", supplier);
+        createTestProductDetail("SN-EXP-003", wp, ProductStatus.SOLD, 1000000.0); // đã bán rồi
+        createTestStock(wp, 2L, 0L);
+        long exportBefore = exportOrderRepository.count();
 
-        /**
-         * TC_INV_029
-         * Objective : Hủy PO ở trạng thái CREATED → thành công
-         * Input     : PO status = CREATED
-         * Expected  : Status đổi thành CANCELLED, gọi save 1 lần
-         *
-         * CheckDB: Verify PO được save với status = CANCELLED
-         */
-        @Test
-        @DisplayName("TC_INV_029 – Hủy PO ở trạng thái CREATED thành công")
-        void TC_INV_029_cancelPO_CreatedStatus_ChangesToCancelled() {
-            purchaseOrder.setStatus(POStatus.CREATED);
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(purchaseOrderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-EXP-003");
+        itemReq.setSerialNumbers(List.of("SN-EXP-003"));
 
-            ApiResponse response = inventoryService.cancelPurchaseOrder(1L);
+        CreateExportOrderRequest req = new CreateExportOrderRequest();
+        req.setItems(List.of(itemReq));
 
-            assertTrue(response.isSuccess());
-            // CheckDB: status phải là CANCELLED
-            assertEquals(POStatus.CANCELLED, purchaseOrder.getStatus(),
-                    "Status PO phải đổi thành CANCELLED");
-            verify(purchaseOrderRepository, times(1)).save(purchaseOrder);
-        }
+        assertThatThrownBy(() -> inventoryService.createExportOrder(req))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("không ở trạng thái IN_STOCK");
 
-        /**
-         * TC_INV_030
-         * Objective : Hủy PO đã RECEIVED → phải từ chối (hàng đã nhập kho rồi)
-         * Input     : PO status = RECEIVED
-         * Expected  : Response lỗi, không save
-         *
-         * ⚠️ BUG HUNTER: Hủy PO đã nhập hàng sẽ tạo inconsistency với inventory stock
-         */
-        @Test
-        @DisplayName("TC_INV_030 – Không cho phép hủy PO đã RECEIVED")
-        void TC_INV_030_cancelPO_ReceivedStatus_ReturnsError() {
-            purchaseOrder.setStatus(POStatus.RECEIVED);
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-
-            ApiResponse response = inventoryService.cancelPurchaseOrder(1L);
-
-            assertFalse(response.isSuccess(), "Phải từ chối hủy PO đã RECEIVED");
-            verify(purchaseOrderRepository, never()).save(any());
-        }
-
-        /**
-         * TC_INV_031
-         * Objective : Hủy PO không tồn tại → ném exception
-         * Input     : id = 99999L
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_031 – Hủy PO không tồn tại phải ném exception")
-        void TC_INV_031_cancelPO_NotFound_ThrowsException() {
-            when(purchaseOrderRepository.findById(99999L)).thenReturn(Optional.empty());
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.cancelPurchaseOrder(99999L));
-        }
-
-        /**
-         * TC_INV_032
-         * Objective : Hủy PO đã CANCELLED → phải từ chối (không hủy 2 lần)
-         * Input     : PO status = CANCELLED
-         * Expected  : Response lỗi
-         *
-         * ⚠️ BUG HUNTER: Nếu cho hủy nhiều lần → UI hiển thị sai state
-         */
-        @Test
-        @DisplayName("TC_INV_032 – Không cho phép hủy PO đã CANCELLED trước đó")
-        void TC_INV_032_cancelPO_AlreadyCancelled_ReturnsError() {
-            purchaseOrder.setStatus(POStatus.CANCELLED);
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-
-            ApiResponse response = inventoryService.cancelPurchaseOrder(1L);
-
-            assertFalse(response.isSuccess(), "Phải từ chối hủy PO đã CANCELLED");
-            verify(purchaseOrderRepository, never()).save(any());
-        }
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore);
     }
 
-    // ================================================================
-    // TC_INV_033 → TC_INV_040: createExportOrder
-    // ================================================================
-    @Nested
-    @DisplayName("createExportOrder Tests")
-    class CreateExportOrderTests {
+    // =========================================================
+    // *** TEST GROUP 8: getPurchaseOrders ***
+    // Mục đích: Kiểm tra lấy danh sách phiếu nhập với filter
+    // =========================================================
 
-        /**
-         * TC_INV_033
-         * Objective : Xuất kho khi stock đủ và serial hợp lệ
-         * Input     : SKU có 50 onHand, xuất 1 serial IN_STOCK
-         * Expected  : Thành công, onHand giảm 1, serial đổi thành SOLD
-         *
-         * CheckDB: Verify productDetailRepository và inventoryStockRepository được update
-         */
-        @Test
-        @DisplayName("TC_INV_033 – Xuất kho hợp lệ giảm inventory và đổi trạng thái serial")
-        void TC_INV_033_createExportOrder_ValidData_StockDecreasedSerialSold() {
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(Collections.singletonList("SN-ABCDEF-001"));
+    @Test
+    @DisplayName("TC_INVENTORY_032 - Lấy tất cả phiếu nhập khi status null")
+    void TC_INVENTORY_032_getPurchaseOrders_noFilter() {
+        Supplier supplier = createTestSupplier("GP01");
 
-            CreateExportOrderRequest req = new CreateExportOrderRequest();
-            req.setItems(Collections.singletonList(itemReq));
-            req.setReason("Xuất bán");
-            req.setCreatedBy("admin");
+        // Tạo 2 PO với trạng thái khác nhau
+        PurchaseOrder po1 = purchaseOrderRepository.save(PurchaseOrder.builder()
+                .poCode("PO-GP-001").supplier(supplier).status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now()).items(List.of()).build());
+        PurchaseOrder po2 = purchaseOrderRepository.save(PurchaseOrder.builder()
+                .poCode("PO-GP-002").supplier(supplier).status(POStatus.RECEIVED)
+                .orderDate(LocalDateTime.now()).items(List.of()).build());
 
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001"))
-                    .thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.findBySerialNumber("SN-ABCDEF-001"))
-                    .thenReturn(Optional.of(productDetail));
-            when(productDetailRepository.save(any())).thenAnswer(inv -> {
-                ProductDetail saved = inv.getArgument(0);
-                // CheckDB: Serial phải đổi trạng thái sang SOLD
-                assertEquals(ProductStatus.SOLD, saved.getStatus(),
-                        "Serial phải đổi thành SOLD sau khi xuất kho");
-                assertNotNull(saved.getSoldDate(), "soldDate phải được gán sau khi xuất");
-                return saved;
-            });
-            when(inventoryStockRepository.save(any())).thenAnswer(inv -> {
-                InventoryStock saved = inv.getArgument(0);
-                // CheckDB: onHand phải giảm 1 (từ 50 xuống 49)
-                assertEquals(49L, saved.getOnHand(),
-                        "onHand phải giảm 1: kỳ vọng 49, thực tế = " + saved.getOnHand());
-                return saved;
-            });
-            when(exportOrderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        long countInDb = purchaseOrderRepository.count();
 
-            ApiResponse response = inventoryService.createExportOrder(req);
+        ApiResponse response = inventoryService.getPurchaseOrders(null);
 
-            assertTrue(response.isSuccess(), "Xuất kho hợp lệ phải thành công");
-            verify(productDetailRepository, times(1)).save(any());
-            verify(inventoryStockRepository, times(1)).save(any());
-        }
+        assertThat(response.isSuccess()).isTrue();
 
-        /**
-         * TC_INV_034
-         * Objective : Xuất kho vượt quá tồn kho → phải từ chối
-         * Input     : onHand = 50, yêu cầu xuất 51 serial
-         * Expected  : RuntimeException vì không đủ hàng
-         */
-        @Test
-        @DisplayName("TC_INV_034 – Xuất vượt tồn kho phải ném exception")
-        void TC_INV_034_createExportOrder_InsufficientStock_ThrowsException() {
-            // Tạo 51 serial
-            List<String> serials = new ArrayList<>();
-            for (int i = 1; i <= 51; i++) serials.add("SN-" + String.format("%03d", i));
+        @SuppressWarnings("unchecked")
+        List<PurchaseOrderListResponse> data = (List<PurchaseOrderListResponse>) response.getData();
+        assertThat(data).hasSize((int) countInDb);
 
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(serials); // 51 > onHand (50)
+        // Kiểm tra từng phần tử trong list
+        PurchaseOrderListResponse dto1 = data.stream()
+                .filter(d -> d.getPoCode().equals("PO-GP-001")).findFirst().orElseThrow();
+        assertThat(dto1.getId()).isEqualTo(po1.getId());
+        assertThat(dto1.getPoCode()).isEqualTo("PO-GP-001");
+        assertThat(dto1.getStatus()).isEqualTo("CREATED");
+        assertThat(dto1.getSupplierName()).isEqualTo(supplier.getName());
+        assertThat(dto1.getOrderDate()).isNotNull();
 
-            CreateExportOrderRequest req = new CreateExportOrderRequest();
-            req.setItems(Collections.singletonList(itemReq));
-            req.setReason("Xuất kho");
-            req.setCreatedBy("admin");
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001"))
-                    .thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock)); // onHand = 50
-
-            assertThrows(RuntimeException.class,
-                    () -> inventoryService.createExportOrder(req),
-                    "Phải ném exception khi xuất vượt tồn kho");
-            verify(exportOrderRepository, never()).save(any());
-        }
-
-        /**
-         * TC_INV_035
-         * Objective : Xuất serial không ở trạng thái IN_STOCK → từ chối
-         * Input     : Serial có status = SOLD
-         * Expected  : RuntimeException – serial đã bán không thể xuất lại
-         *
-         * ⚠️ BUG HUNTER: Nghiệp vụ quan trọng – không được xuất serial đã bán
-         */
-        @Test
-        @DisplayName("TC_INV_035 – Xuất serial đã SOLD phải bị từ chối")
-        void TC_INV_035_createExportOrder_SoldSerialStatus_ThrowsException() {
-            productDetail.setStatus(ProductStatus.SOLD); // Đã bán
-
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(Collections.singletonList("SN-ABCDEF-001"));
-
-            CreateExportOrderRequest req = new CreateExportOrderRequest();
-            req.setItems(Collections.singletonList(itemReq));
-            req.setReason("Xuất kho");
-            req.setCreatedBy("admin");
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001"))
-                    .thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.findBySerialNumber("SN-ABCDEF-001"))
-                    .thenReturn(Optional.of(productDetail));
-
-            assertThrows(RuntimeException.class,
-                    () -> inventoryService.createExportOrder(req),
-                    "Phải ném exception khi serial đã SOLD");
-        }
-
-        /**
-         * TC_INV_036
-         * Objective : Xuất SKU không tồn tại trong kho → ném exception
-         * Input     : productSku = "SKU-GHOST" không có
-         * Expected  : RuntimeException
-         */
-        @Test
-        @DisplayName("TC_INV_036 – Xuất SKU không tồn tại phải ném exception")
-        void TC_INV_036_createExportOrder_UnknownSku_ThrowsException() {
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-GHOST");
-            itemReq.setSerialNumbers(Collections.singletonList("SN001"));
-
-            CreateExportOrderRequest req = new CreateExportOrderRequest();
-            req.setItems(Collections.singletonList(itemReq));
-            req.setReason("Test");
-            req.setCreatedBy("admin");
-
-            when(warehouseProductRepository.findBySku("SKU-GHOST")).thenReturn(Optional.empty());
-
-            assertThrows(RuntimeException.class,
-                    () -> inventoryService.createExportOrder(req),
-                    "Phải ném exception khi SKU không tồn tại");
-        }
-
-        /**
-         * TC_INV_037
-         * Objective : Xuất kho thành công với onHand = 1 (boundary condition)
-         * Input     : onHand = 1, xuất đúng 1 serial
-         * Expected  : Thành công, onHand = 0 sau giao dịch
-         */
-        @Test
-        @DisplayName("TC_INV_037 – Xuất kho khi onHand = 1 thành công (giá trị biên)")
-        void TC_INV_037_createExportOrder_BoundaryOnHandEqualsOne_Success() {
-            inventoryStock.setOnHand(1L); // chỉ còn 1
-
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(Collections.singletonList("SN-ABCDEF-001"));
-
-            CreateExportOrderRequest req = new CreateExportOrderRequest();
-            req.setItems(Collections.singletonList(itemReq));
-            req.setReason("Xuất bán");
-            req.setCreatedBy("admin");
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001"))
-                    .thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.findBySerialNumber("SN-ABCDEF-001"))
-                    .thenReturn(Optional.of(productDetail));
-            when(productDetailRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            when(inventoryStockRepository.save(any())).thenAnswer(inv -> {
-                InventoryStock saved = inv.getArgument(0);
-                // CheckDB: onHand phải = 0
-                assertEquals(0L, saved.getOnHand(),
-                        "onHand phải = 0 sau khi xuất hết");
-                return saved;
-            });
-            when(exportOrderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-            ApiResponse response = inventoryService.createExportOrder(req);
-            assertTrue(response.isSuccess(), "Xuất hết hàng cuối cùng phải thành công");
-        }
+        PurchaseOrderListResponse dto2 = data.stream()
+                .filter(d -> d.getPoCode().equals("PO-GP-002")).findFirst().orElseThrow();
+        assertThat(dto2.getStatus()).isEqualTo("RECEIVED");
     }
 
-    // ================================================================
-    // TC_INV_038 → TC_INV_043: cancelExportOrder
-    // ================================================================
-    @Nested
-    @DisplayName("cancelExportOrder Tests")
-    class CancelExportOrderTests {
+    @Test
+    @DisplayName("TC_INVENTORY_033 - Lấy phiếu nhập theo status CREATED")
+    void TC_INVENTORY_033_getPurchaseOrders_filterByCreated() {
+        Supplier supplier = createTestSupplier("GP02");
 
-        /**
-         * TC_INV_038
-         * Objective : Hủy export order ở trạng thái CREATED
-         * Input     : ExportOrder status = CREATED
-         * Expected  : Thành công, status → CANCELLED
-         *
-         * CheckDB: Verify exportOrderRepository.save() với status CANCELLED
-         */
-        @Test
-        @DisplayName("TC_INV_038 – Hủy export order CREATED thành công")
-        void TC_INV_038_cancelExportOrder_CreatedStatus_Success() {
-            ExportOrder exportOrder = ExportOrder.builder()
-                    .id(1L).status(ExportStatus.CREATED).exportCode("PX-001").build();
-            when(exportOrderRepository.findById(1L)).thenReturn(Optional.of(exportOrder));
-            when(exportOrderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        purchaseOrderRepository.save(PurchaseOrder.builder()
+                .poCode("PO-CREATED-001").supplier(supplier).status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now()).items(List.of()).build());
+        purchaseOrderRepository.save(PurchaseOrder.builder()
+                .poCode("PO-RECEIVED-001").supplier(supplier).status(POStatus.RECEIVED)
+                .orderDate(LocalDateTime.now()).items(List.of()).build());
 
-            ApiResponse response = inventoryService.cancelExportOrder(1L);
+        ApiResponse response = inventoryService.getPurchaseOrders(POStatus.CREATED);
 
-            assertTrue(response.isSuccess());
-            // CheckDB: Kiểm tra status được lưu đúng
-            assertEquals(ExportStatus.CANCELLED, exportOrder.getStatus(),
-                    "Status phải là CANCELLED sau khi hủy");
-            verify(exportOrderRepository, times(1)).save(exportOrder);
-        }
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<PurchaseOrderListResponse> data = (List<PurchaseOrderListResponse>) response.getData();
 
-        /**
-         * TC_INV_039
-         * Objective : Hủy export order đã COMPLETED → phải từ chối
-         * Input     : ExportOrder status = COMPLETED (đã xuất hàng)
-         * Expected  : Response lỗi
-         *
-         * ⚠️ BUG HUNTER: Nghiệp vụ – đơn xuất đã hoàn thành không thể hủy đơn giản
-         */
-        @Test
-        @DisplayName("TC_INV_039 – Không cho phép hủy export order đã COMPLETED")
-        void TC_INV_039_cancelExportOrder_CompletedStatus_ReturnsError() {
-            ExportOrder exportOrder = ExportOrder.builder()
-                    .id(1L).status(ExportStatus.COMPLETED).exportCode("PX-001").build();
-            when(exportOrderRepository.findById(1L)).thenReturn(Optional.of(exportOrder));
-
-            ApiResponse response = inventoryService.cancelExportOrder(1L);
-
-            assertFalse(response.isSuccess(), "Phải từ chối hủy export order đã COMPLETED");
-            verify(exportOrderRepository, never()).save(any());
-        }
-
-        /**
-         * TC_INV_040
-         * Objective : Hủy export order không tồn tại
-         * Input     : id = 9999L
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_040 – Hủy export order không tồn tại phải ném exception")
-        void TC_INV_040_cancelExportOrder_NotFound_ThrowsException() {
-            when(exportOrderRepository.findById(9999L)).thenReturn(Optional.empty());
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.cancelExportOrder(9999L));
-        }
+        // Chỉ có PO với status CREATED
+        assertThat(data).allMatch(d -> d.getStatus().equals("CREATED"));
+        assertThat(data.stream().anyMatch(d -> d.getPoCode().equals("PO-CREATED-001"))).isTrue();
+        assertThat(data.stream().noneMatch(d -> d.getPoCode().equals("PO-RECEIVED-001"))).isTrue();
     }
 
-    // ================================================================
-    // TC_INV_041 → TC_INV_046: getStocks
-    // ================================================================
-    @Nested
-    @DisplayName("getStocks Tests")
-    class GetStocksTests {
+    @Test
+    @DisplayName("TC_INVENTORY_034 - Lấy phiếu nhập khi danh sách rỗng")
+    void TC_INVENTORY_034_getPurchaseOrders_empty() {
+        purchaseOrderRepository.deleteAll();
 
-        /**
-         * TC_INV_041
-         * Objective : Lấy tất cả tồn kho không có filter
-         * Input     : status = null
-         * Expected  : Trả về tất cả stocks từ DB
-         */
-        @Test
-        @DisplayName("TC_INV_041 – Không filter trả về toàn bộ tồn kho")
-        void TC_INV_041_getStocks_NoFilter_ReturnsAll() {
-            when(inventoryStockRepository.findAll())
-                    .thenReturn(Collections.singletonList(inventoryStock));
+        ApiResponse response = inventoryService.getPurchaseOrders(null);
 
-            ApiResponse response = inventoryService.getStocks(null);
-
-            assertTrue(response.isSuccess());
-            @SuppressWarnings("unchecked")
-            List<?> data = (List<?>) response.getData();
-            assertEquals(1, data.size());
-        }
-
-        /**
-         * TC_INV_042
-         * Objective : Filter "low_stock" → chỉ trả về hàng tồn ít
-         * Input     : status = "low_stock"
-         * Expected  : Gọi findLowStockItems với ngưỡng 10
-         */
-        @Test
-        @DisplayName("TC_INV_042 – Filter low_stock gọi đúng repository method")
-        void TC_INV_042_getStocks_LowStockFilter_CallsCorrectRepo() {
-            when(inventoryStockRepository.findLowStockItems(10L))
-                    .thenReturn(Collections.singletonList(inventoryStock));
-
-            ApiResponse response = inventoryService.getStocks("low_stock");
-
-            assertTrue(response.isSuccess());
-            verify(inventoryStockRepository).findLowStockItems(10L);
-            verify(inventoryStockRepository, never()).findAll();
-        }
-
-        /**
-         * TC_INV_043
-         * Objective : Filter "out_of_stock" → chỉ trả về hàng onHand <= 0
-         * Input     : status = "out_of_stock"
-         * Expected  : Chỉ trả về stocks có onHand = 0
-         *
-         * ⚠️ BUG HUNTER: Verify filter logic – không trả về hàng còn tồn
-         */
-        @Test
-        @DisplayName("TC_INV_043 – Filter out_of_stock chỉ trả về stock hết hàng")
-        void TC_INV_043_getStocks_OutOfStockFilter_OnlyZeroOnHand() {
-            InventoryStock outOfStock = InventoryStock.builder()
-                    .id(2L).warehouseProduct(warehouseProduct)
-                    .onHand(0L).reserved(0L).damaged(0L).build();
-            // inventoryStock có onHand = 50 (không phải out of stock)
-            when(inventoryStockRepository.findAll())
-                    .thenReturn(Arrays.asList(inventoryStock, outOfStock));
-
-            ApiResponse response = inventoryService.getStocks("out_of_stock");
-
-            assertTrue(response.isSuccess());
-            @SuppressWarnings("unchecked")
-            List<?> data = (List<?>) response.getData();
-            // Chỉ 1 stock thực sự out of stock
-            assertEquals(1, data.size(),
-                    "Filter out_of_stock chỉ được trả về stock có onHand <= 0, không lọc lẫn với stock còn hàng");
-        }
-
-        /**
-         * TC_INV_044
-         * Objective : Filter status không hợp lệ → hành vi rõ ràng
-         * Input     : status = "invalid_filter"
-         * Expected  : Không ném exception, có thể trả về all hoặc error code rõ ràng
-         *
-         * ⚠️ BUG HUNTER: Filter unknown → phải có behavior xác định
-         */
-        @Test
-        @DisplayName("TC_INV_044 – Filter status không hợp lệ không gây exception")
-        void TC_INV_044_getStocks_UnknownFilter_HandlesGracefully() {
-            when(inventoryStockRepository.findAll())
-                    .thenReturn(Collections.singletonList(inventoryStock));
-
-            // Không được throw exception
-            assertDoesNotThrow(() -> inventoryService.getStocks("invalid_filter"),
-                    "Filter không hợp lệ không được gây exception");
-        }
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<?> data = (List<?>) response.getData();
+        assertThat(data).isEmpty();
     }
 
-    // ================================================================
-    // TC_INV_045 → TC_INV_048: getStockDetails
-    // ================================================================
-    @Nested
-    @DisplayName("getStockDetails Tests")
-    class GetStockDetailsTests {
+    // =========================================================
+    // *** TEST GROUP 9: getPurchaseOrderDetail ***
+    // Mục đích: Kiểm tra lấy chi tiết một phiếu nhập
+    // =========================================================
 
-        /**
-         * TC_INV_045
-         * Objective : Lấy chi tiết stock với ID hợp lệ
-         * Input     : warehouseProductId = 10L có 1 serial
-         * Expected  : Trả về danh sách serial đầy đủ
-         */
-        @Test
-        @DisplayName("TC_INV_045 – Lấy chi tiết stock trả về đúng serial")
-        void TC_INV_045_getStockDetails_ValidId_ReturnsSerials() {
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(warehouseProduct));
-            when(productDetailRepository.findAllByWarehouseProduct_Id(10L))
-                    .thenReturn(Collections.singletonList(productDetail));
+    @Test
+    @DisplayName("TC_INVENTORY_035 - Lấy chi tiết phiếu nhập thành công")
+    @Transactional
+    void TC_INVENTORY_035_getPurchaseOrderDetail_success() {
+        Supplier supplier = createTestSupplier("POD01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-POD-001", supplier);
 
-            ApiResponse response = inventoryService.getStockDetails(10L);
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-DETAIL-001")
+                .supplier(supplier)
+                .status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now())
+                .createdBy("admin")
+                .note("Chi tiết test")
+                .build();
 
-            assertTrue(response.isSuccess());
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> serials = (List<Map<String, Object>>) response.getData();
-            assertEquals(1, serials.size());
-            assertEquals("SN-ABCDEF-001", serials.get(0).get("serialNumber"));
-        }
+        PurchaseOrderItem item = PurchaseOrderItem.builder()
+                .purchaseOrder(po)
+                .sku("SKU-POD-001")
+                .warehouseProduct(wp)
+                .quantity(3L)
+                .unitCost(750000.0)
+                .warrantyMonths(6)
+                .note("item note")
+                .build();
 
-        /**
-         * TC_INV_046
-         * Objective : warehouseProductId không tồn tại
-         * Input     : id = 9999L
-         * Expected  : Response lỗi hoặc exception
-         */
-        @Test
-        @DisplayName("TC_INV_046 – getStockDetails ID không tồn tại trả về error")
-        void TC_INV_046_getStockDetails_NotFound_ReturnsError() {
-            when(warehouseProductRepository.findById(9999L)).thenReturn(Optional.empty());
+        po.setItems(List.of(item));
+        purchaseOrderRepository.save(po);
 
-            ApiResponse response = inventoryService.getStockDetails(9999L);
+        ApiResponse response = inventoryService.getPurchaseOrderDetail(po.getId());
 
-            assertFalse(response.isSuccess(), "Phải trả về lỗi khi warehouseProductId không tồn tại");
-        }
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Chi tiết phiếu nhập");
+
+        PurchaseOrderDetailResponse dto = (PurchaseOrderDetailResponse) response.getData();
+        assertThat(dto.getId()).isEqualTo(po.getId());
+        assertThat(dto.getPoCode()).isEqualTo("PO-DETAIL-001");
+        assertThat(dto.getStatus()).isEqualTo("CREATED");
+        assertThat(dto.getCreatedBy()).isEqualTo("admin");
+        assertThat(dto.getNote()).isEqualTo("Chi tiết test");
+        assertThat(dto.getTotalAmount()).isEqualTo(3L * 750000.0);
+
+        // Kiểm tra thông tin supplier
+        assertThat(dto.getSupplier()).isNotNull();
+        assertThat(dto.getSupplier().getTaxCode()).isEqualTo("TAXPOD01");
+        assertThat(dto.getSupplier().getName()).isEqualTo("Nhà cung cấp POD01");
+
+        // Kiểm tra items
+        assertThat(dto.getItems()).hasSize(1);
+        PurchaseOrderDetailResponse.PurchaseOrderItemInfo itemInfo = dto.getItems().get(0);
+        assertThat(itemInfo.getSku()).isEqualTo("SKU-POD-001");
+        assertThat(itemInfo.getQuantity()).isEqualTo(3);
+        assertThat(itemInfo.getUnitCost()).isEqualTo(750000.0);
+        assertThat(itemInfo.getWarrantyMonths()).isEqualTo(6);
+        assertThat(itemInfo.getNote()).isEqualTo("item note");
+
+        // Kiểm tra warehouseProduct trong item
+        assertThat(itemInfo.getWarehouseProduct()).isNotNull();
+        assertThat(itemInfo.getWarehouseProduct().getSku()).isEqualTo("SKU-POD-001");
     }
 
-    // ================================================================
-    // TC_INV_047 → TC_INV_052: exportForSale
-    // ================================================================
-    @Nested
-    @DisplayName("exportForSale Tests")
-    class ExportForSaleTests {
-
-        /**
-         * TC_INV_047
-         * Objective : exportForSale với items null hoặc rỗng → từ chối
-         * Input     : items = null
-         * Expected  : Response lỗi ngay, không process
-         */
-        @Test
-        @DisplayName("TC_INV_047 – exportForSale với items null phải trả về lỗi")
-        void TC_INV_047_exportForSale_NullItems_ReturnsError() {
-            SaleExportRequest req = new SaleExportRequest();
-            req.setOrderId(1L);
-            req.setReason("Giao hàng khách");
-            req.setItems(null);
-
-            ApiResponse response = inventoryService.exportForSale(req);
-
-            assertFalse(response.isSuccess(), "items null phải trả về lỗi");
-            verify(exportOrderRepository, never()).save(any());
-        }
-
-        /**
-         * TC_INV_048
-         * Objective : exportForSale với items rỗng → từ chối
-         * Input     : items = []
-         * Expected  : Response lỗi
-         */
-        @Test
-        @DisplayName("TC_INV_048 – exportForSale với items rỗng phải trả về lỗi")
-        void TC_INV_048_exportForSale_EmptyItems_ReturnsError() {
-            SaleExportRequest req = new SaleExportRequest();
-            req.setOrderId(1L);
-            req.setReason("Giao hàng");
-            req.setItems(Collections.emptyList());
-
-            ApiResponse response = inventoryService.exportForSale(req);
-
-            assertFalse(response.isSuccess(), "items rỗng phải trả về lỗi");
-        }
-
-        /**
-         * TC_INV_049
-         * Objective : Xuất bán serial không IN_STOCK → phải từ chối
-         * Input     : serial trong WARRANTY status
-         * Expected  : Response lỗi
-         *
-         * ⚠️ BUG HUNTER: Serial bảo hành không thể bán lại
-         */
-        @Test
-        @DisplayName("TC_INV_049 – Xuất bán serial đang WARRANTY phải từ chối")
-        void TC_INV_049_exportForSale_WarrantySerial_ReturnsError() {
-            productDetail.setStatus(ProductStatus.WARRANTY);
-
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(Collections.singletonList("SN-ABCDEF-001"));
-
-            SaleExportRequest req = new SaleExportRequest();
-            req.setOrderId(1L);
-            req.setReason("Giao hàng");
-            req.setItems(Collections.singletonList(itemReq));
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001"))
-                    .thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.findBySerialNumber("SN-ABCDEF-001"))
-                    .thenReturn(Optional.of(productDetail));
-
-            ApiResponse response = inventoryService.exportForSale(req);
-
-            assertFalse(response.isSuccess(),
-                    "Serial trong trạng thái WARRANTY không thể xuất bán");
-        }
-
-        /**
-         * TC_INV_050
-         * Objective : Xuất bán khi onHand < số serial cần xuất → từ chối
-         * Input     : onHand = 0, yêu cầu xuất 1 serial
-         * Expected  : Response lỗi không đủ hàng
-         */
-        @Test
-        @DisplayName("TC_INV_050 – exportForSale khi hết hàng phải trả về lỗi")
-        void TC_INV_050_exportForSale_ZeroStock_ReturnsError() {
-            inventoryStock.setOnHand(0L);
-
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(Collections.singletonList("SN-ABCDEF-001"));
-
-            SaleExportRequest req = new SaleExportRequest();
-            req.setOrderId(1L);
-            req.setReason("Giao hàng");
-            req.setItems(Collections.singletonList(itemReq));
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001"))
-                    .thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-
-            ApiResponse response = inventoryService.exportForSale(req);
-
-            assertFalse(response.isSuccess(), "Phải từ chối khi onHand = 0");
-        }
+    @Test
+    @DisplayName("TC_INVENTORY_036 - Lấy chi tiết phiếu nhập thất bại khi không tồn tại")
+    void TC_INVENTORY_036_getPurchaseOrderDetail_notFound() {
+        assertThatThrownBy(() -> inventoryService.getPurchaseOrderDetail(999999L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy phiếu nhập");
     }
 
-    // ================================================================
-    // TC_INV_051 → TC_INV_055: exportForWarranty
-    // ================================================================
-    @Nested
-    @DisplayName("exportForWarranty Tests")
-    class ExportForWarrantyTests {
+    // =========================================================
+    // *** TEST GROUP 10: cancelPurchaseOrder ***
+    // Mục đích: Kiểm tra hủy phiếu nhập hàng
+    // =========================================================
 
-        /**
-         * TC_INV_051
-         * Objective : Serial IN_STOCK → xuất bảo hành thành công
-         * Input     : Serial status = IN_STOCK, onHand > 0
-         * Expected  : Serial → WARRANTY, onHand giảm 1
-         *
-         * CheckDB: inventoryStockRepository.save gọi với onHand giảm 1
-         */
-        @Test
-        @DisplayName("TC_INV_051 – Xuất bảo hành serial IN_STOCK thành công")
-        void TC_INV_051_exportForWarranty_InStockSerial_Success() {
-            productDetail.setStatus(ProductStatus.IN_STOCK);
-            inventoryStock.setOnHand(10L);
+    @Test
+    @DisplayName("TC_INVENTORY_037 - Hủy phiếu nhập thành công khi đang ở trạng thái CREATED")
+    void TC_INVENTORY_037_cancelPurchaseOrder_success() {
+        Supplier supplier = createTestSupplier("CAN01");
+        PurchaseOrder po = purchaseOrderRepository.save(PurchaseOrder.builder()
+                .poCode("PO-CANCEL-001").supplier(supplier).status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now()).items(List.of()).build());
 
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(Collections.singletonList("SN-ABCDEF-001"));
+        ApiResponse response = inventoryService.cancelPurchaseOrder(po.getId());
 
-            WarrantyExportRequest req = new WarrantyExportRequest();
-            req.setCreatedBy("warehouse_staff");
-            req.setWarrantyType("CUSTOMER_WARRANTY");
-            req.setReason("Lỗi màn hình");
-            req.setItems(Collections.singletonList(itemReq));
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Đã hủy phiếu nhập thành công");
 
-            when(productDetailRepository.findBySerialNumber("SN-ABCDEF-001"))
-                    .thenReturn(Optional.of(productDetail));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.save(any())).thenAnswer(inv -> {
-                ProductDetail saved = inv.getArgument(0);
-                // CheckDB: Serial phải đổi sang WARRANTY
-                assertEquals(ProductStatus.WARRANTY, saved.getStatus(),
-                        "Serial phải đổi trạng thái thành WARRANTY");
-                return saved;
-            });
-            when(inventoryStockRepository.save(any())).thenAnswer(inv -> {
-                InventoryStock saved = inv.getArgument(0);
-                // CheckDB: onHand phải giảm 1
-                assertEquals(9L, saved.getOnHand(),
-                        "onHand phải giảm 1 khi xuất bảo hành");
-                return saved;
-            });
-            when(exportOrderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            when(exportOrderItemRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-            ApiResponse response = inventoryService.exportForWarranty(req);
-
-            assertTrue(response.isSuccess(), "Xuất bảo hành serial hợp lệ phải thành công");
-        }
-
-        /**
-         * TC_INV_052
-         * Objective : Serial đã WARRANTY → không thể xuất bảo hành lần 2
-         * Input     : productDetail.status = WARRANTY
-         * Expected  : Response lỗi
-         *
-         * ⚠️ BUG HUNTER: Code cho phép WARRANTY và IN_STOCK, nhưng DAMAGED thì sao?
-         */
-        @Test
-        @DisplayName("TC_INV_052 – Serial đã WARRANTY không thể xuất bảo hành lần 2")
-        void TC_INV_052_exportForWarranty_AlreadyWarrantySerial_ReturnsError() {
-            productDetail.setStatus(ProductStatus.WARRANTY);
-
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(Collections.singletonList("SN-ABCDEF-001"));
-
-            WarrantyExportRequest req = new WarrantyExportRequest();
-            req.setCreatedBy("staff");
-            req.setWarrantyType("CUSTOMER_WARRANTY");
-            req.setReason("Test");
-            req.setItems(Collections.singletonList(itemReq));
-
-            when(productDetailRepository.findBySerialNumber("SN-ABCDEF-001"))
-                    .thenReturn(Optional.of(productDetail));
-
-            ApiResponse response = inventoryService.exportForWarranty(req);
-
-            assertFalse(response.isSuccess(),
-                    "Serial đã WARRANTY không thể xuất bảo hành lần thứ 2");
-        }
-
-        /**
-         * TC_INV_053
-         * Objective : kho hết hàng (onHand = 0) → từ chối xuất bảo hành
-         * Input     : onHand = 0
-         * Expected  : Response lỗi
-         *
-         * ⚠️ BUG HUNTER: Nếu onHand = 0 mà vẫn trừ sẽ âm kho
-         */
-        @Test
-        @DisplayName("TC_INV_053 – Xuất bảo hành khi onHand = 0 phải từ chối")
-        void TC_INV_053_exportForWarranty_ZeroStock_ReturnsError() {
-            productDetail.setStatus(ProductStatus.IN_STOCK);
-            inventoryStock.setOnHand(0L);
-
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(Collections.singletonList("SN-ABCDEF-001"));
-
-            WarrantyExportRequest req = new WarrantyExportRequest();
-            req.setCreatedBy("staff");
-            req.setWarrantyType("CUSTOMER_WARRANTY");
-            req.setReason("Bảo hành");
-            req.setItems(Collections.singletonList(itemReq));
-
-            when(productDetailRepository.findBySerialNumber("SN-ABCDEF-001"))
-                    .thenReturn(Optional.of(productDetail));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-
-            ApiResponse response = inventoryService.exportForWarranty(req);
-
-            assertFalse(response.isSuccess(), "Phải từ chối khi onHand = 0");
-            // CheckDB: Không được save với onHand âm
-            verify(inventoryStockRepository, never()).save(any());
-        }
+        // Kiểm tra DB: status đã chuyển CANCELLED
+        PurchaseOrder fromDb = purchaseOrderRepository.findById(po.getId()).orElseThrow();
+        assertThat(fromDb.getStatus()).isEqualTo(POStatus.CANCELLED);
     }
 
-    // ================================================================
-    // TC_INV_054 → TC_INV_057: syncReservedQuantity
-    // ================================================================
-    @Nested
-    @DisplayName("syncReservedQuantity Tests")
-    class SyncReservedQuantityTests {
+    @Test
+    @DisplayName("TC_INVENTORY_038 - Hủy phiếu nhập thất bại khi không ở trạng thái CREATED")
+    void TC_INVENTORY_038_cancelPurchaseOrder_wrongStatus() {
+        Supplier supplier = createTestSupplier("CAN02");
+        PurchaseOrder po = purchaseOrderRepository.save(PurchaseOrder.builder()
+                .poCode("PO-CANCEL-002").supplier(supplier).status(POStatus.RECEIVED)
+                .orderDate(LocalDateTime.now()).items(List.of()).build());
 
-        /**
-         * TC_INV_054
-         * Objective : Sync reserved cho warehouseProduct tồn tại
-         * Input     : warehouseProductId = 10L, newReserved = 5L
-         * Expected  : stock.reserved = 5, gọi save
-         *
-         * CheckDB: Verify inventoryStockRepository.save với reserved đúng
-         */
-        @Test
-        @DisplayName("TC_INV_054 – syncReservedQuantity cập nhật đúng reserved")
-        void TC_INV_054_syncReservedQuantity_ValidId_UpdatesReserved() {
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-            when(inventoryStockRepository.save(any())).thenAnswer(inv -> {
-                InventoryStock saved = inv.getArgument(0);
-                // CheckDB: Kiểm tra reserved được cập nhật đúng
-                assertEquals(5L, saved.getReserved(),
-                        "Reserved phải được cập nhật thành 5");
-                return saved;
-            });
+        ApiResponse response = inventoryService.cancelPurchaseOrder(po.getId());
 
-            inventoryService.syncReservedQuantity(10L, 5L);
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("Chỉ có thể hủy phiếu ở trạng thái chờ xử lý");
 
-            verify(inventoryStockRepository, times(1)).save(any());
-        }
-
-        /**
-         * TC_INV_055
-         * Objective : Sync reserved âm → nghiệp vụ không hợp lệ
-         * Input     : newReserved = -1L
-         * Expected  : Không lưu reserved âm, hoặc ném exception
-         *
-         * ⚠️ BUG HUNTER: Nếu reserved âm → getSellable() trả về sai
-         */
-        @Test
-        @DisplayName("TC_INV_055 – syncReservedQuantity với giá trị âm là bất hợp lệ")
-        void TC_INV_055_syncReservedQuantity_NegativeValue_ShouldReject() {
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.of(inventoryStock));
-            when(inventoryStockRepository.save(any())).thenAnswer(inv -> {
-                InventoryStock saved = inv.getArgument(0);
-                if (saved.getReserved() < 0) {
-                    System.out.println("[BUG DETECTED] TC_INV_055: reserved âm = " + saved.getReserved()
-                            + " → getSellable() sẽ trả về sai");
-                }
-                return saved;
-            });
-
-            // Gọi với giá trị âm – hành vi phải xác định
-            inventoryService.syncReservedQuantity(10L, -1L);
-        }
-
-        /**
-         * TC_INV_056
-         * Objective : Sync reserved cho warehouseProduct không tồn tại
-         * Input     : warehouseProductId = 9999L
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_056 – syncReservedQuantity ID không tồn tại phải ném exception")
-        void TC_INV_056_syncReservedQuantity_NotFound_ThrowsException() {
-            when(warehouseProductRepository.findById(9999L)).thenReturn(Optional.empty());
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.syncReservedQuantity(9999L, 5L));
-        }
-
-        /**
-         * TC_INV_057
-         * Objective : Sync reserved tạo stock mới nếu chưa có
-         * Input     : warehouseProductId = 10L, không có stock record
-         * Expected  : Tạo stock mới với reserved = 3, onHand = 0
-         *
-         * CheckDB: Verify inventoryStockRepository.save được gọi
-         */
-        @Test
-        @DisplayName("TC_INV_057 – syncReservedQuantity tạo stock mới nếu chưa có record")
-        void TC_INV_057_syncReservedQuantity_NoExistingStock_CreatesNewStock() {
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L))
-                    .thenReturn(Optional.empty()); // Không có stock record
-            when(inventoryStockRepository.save(any())).thenAnswer(inv -> {
-                InventoryStock saved = inv.getArgument(0);
-                // CheckDB: Stock mới phải có reserved đúng và onHand = 0
-                assertEquals(3L, saved.getReserved(),
-                        "Stock mới phải có reserved = 3");
-                assertEquals(0L, saved.getOnHand(),
-                        "Stock mới phải có onHand = 0");
-                return saved;
-            });
-
-            inventoryService.syncReservedQuantity(10L, 3L);
-
-            verify(inventoryStockRepository, times(1)).save(any());
-        }
+        // DB không thay đổi
+        PurchaseOrder fromDb = purchaseOrderRepository.findById(po.getId()).orElseThrow();
+        assertThat(fromDb.getStatus()).isEqualTo(POStatus.RECEIVED); // vẫn RECEIVED
     }
 
-    // ================================================================
-    // TC_INV_058 → TC_INV_061: getPurchaseOrders & getPurchaseOrderDetail
-    // ================================================================
-    @Nested
-    @DisplayName("getPurchaseOrders & getPurchaseOrderDetail Tests")
-    class GetPurchaseOrderTests {
-
-        /**
-         * TC_INV_058
-         * Objective : Lấy PO theo status filter CREATED
-         * Input     : status = POStatus.CREATED
-         * Expected  : Gọi findByStatus không phải findAll
-         */
-        @Test
-        @DisplayName("TC_INV_058 – Filter theo status gọi findByStatus")
-        void TC_INV_058_getPurchaseOrders_WithStatusFilter_CallsFindByStatus() {
-            when(purchaseOrderRepository.findByStatus(POStatus.CREATED))
-                    .thenReturn(Collections.singletonList(purchaseOrder));
-
-            ApiResponse response = inventoryService.getPurchaseOrders(POStatus.CREATED);
-
-            assertTrue(response.isSuccess());
-            verify(purchaseOrderRepository).findByStatus(POStatus.CREATED);
-            verify(purchaseOrderRepository, never()).findAll();
-        }
-
-        /**
-         * TC_INV_059
-         * Objective : Lấy chi tiết PO không tồn tại
-         * Input     : id = 9999L
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_059 – getPurchaseOrderDetail ID không tồn tại phải ném exception")
-        void TC_INV_059_getPurchaseOrderDetail_NotFound_ThrowsException() {
-            when(purchaseOrderRepository.findById(9999L)).thenReturn(Optional.empty());
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.getPurchaseOrderDetail(9999L));
-        }
-
-        /**
-         * TC_INV_060
-         * Objective : Lấy chi tiết PO với items null → không NPE
-         * Input     : PO hợp lệ nhưng items là null
-         * Expected  : Không NPE (phải xử lý graceful)
-         *
-         * ⚠️ BUG HUNTER: mapToPurchaseOrderDetailDTO gọi po.getItems().stream() → NPE nếu items null
-         */
-        @Test
-        @DisplayName("TC_INV_060 – getPurchaseOrderDetail với items null không gây NPE")
-        void TC_INV_060_getPurchaseOrderDetail_NullItems_NoNPE() {
-            purchaseOrder.setItems(null); // null items
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-
-            // Nếu NPE xảy ra, test sẽ thất bại với message rõ ràng
-            assertDoesNotThrow(() -> inventoryService.getPurchaseOrderDetail(1L),
-                    "getPurchaseOrderDetail không được NPE khi PO.items null");
-        }
+    @Test
+    @DisplayName("TC_INVENTORY_039 - Hủy phiếu nhập thất bại khi ID không tồn tại")
+    void TC_INVENTORY_039_cancelPurchaseOrder_notFound() {
+        assertThatThrownBy(() -> inventoryService.cancelPurchaseOrder(999999L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy phiếu nhập");
     }
 
-    // ================================================================
-    // TC_INV_061 → TC_INV_063: getExportOrders & getExportOrderDetail
-    // ================================================================
-    @Nested
-    @DisplayName("getExportOrders & getExportOrderDetail Tests")
-    class GetExportOrderTests {
+    // =========================================================
+    // *** TEST GROUP 11: getStocks ***
+    // Mục đích: Kiểm tra lấy danh sách tồn kho với filter
+    // =========================================================
 
-        /**
-         * TC_INV_061
-         * Objective : Lấy export orders không có filter
-         * Input     : status = null
-         * Expected  : findAll được gọi
-         */
-        @Test
-        @DisplayName("TC_INV_061 – getExportOrders không filter gọi findAll")
-        void TC_INV_061_getExportOrders_NoFilter_CallsFindAll() {
-            when(exportOrderRepository.findAll()).thenReturn(Collections.emptyList());
+    @Test
+    @DisplayName("TC_INVENTORY_040 - Lấy tất cả tồn kho không có filter")
+    void TC_INVENTORY_040_getStocks_noFilter() {
+        Supplier supplier = createTestSupplier("STK01");
+        WarehouseProduct wp1 = createTestWarehouseProduct("SKU-STK-001", supplier);
+        WarehouseProduct wp2 = createTestWarehouseProduct("SKU-STK-002", supplier);
+        createTestStock(wp1, 10L, 2L);
+        createTestStock(wp2, 5L, 1L);
+        long stockCount = inventoryStockRepository.count();
 
-            ApiResponse response = inventoryService.getExportOrders(null);
+        ApiResponse response = inventoryService.getStocks(null);
 
-            assertTrue(response.isSuccess());
-            verify(exportOrderRepository).findAll();
-        }
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> data = (List<Map<String, Object>>) response.getData();
+        assertThat(data).hasSize((int) stockCount);
 
-        /**
-         * TC_INV_062
-         * Objective : Lấy chi tiết export order không tồn tại
-         * Input     : id = 9999L
-         * Expected  : IllegalArgumentException
-         */
-        @Test
-        @DisplayName("TC_INV_062 – getExportOrderDetail ID không tồn tại phải ném exception")
-        void TC_INV_062_getExportOrderDetail_NotFound_ThrowsException() {
-            when(exportOrderRepository.findById(9999L)).thenReturn(Optional.empty());
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> inventoryService.getExportOrderDetail(9999L));
-        }
+        // Kiểm tra từng thuộc tính của phần tử đầu tiên
+        Map<String, Object> first = data.stream()
+                .filter(d -> ((Map<?, ?>) d.get("warehouseProduct")).get("sku").equals("SKU-STK-001"))
+                .findFirst().orElseThrow();
+        assertThat(first.get("onHand")).isEqualTo(10L);
+        assertThat(first.get("reserved")).isEqualTo(2L);
+        assertThat(first.get("damaged")).isEqualTo(0L);
     }
 
-    // ================================================================
-    // TC_INV_063: InventoryStock business logic
-    // ================================================================
-    @Nested
-    @DisplayName("InventoryStock Business Logic Tests")
-    class InventoryStockBusinessLogicTests {
+    @Test
+    @DisplayName("TC_INVENTORY_041 - Lấy tồn kho với filter 'low_stock'")
+    void TC_INVENTORY_041_getStocks_lowStockFilter() {
+        Supplier supplier = createTestSupplier("STK02");
+        WarehouseProduct wp1 = createTestWarehouseProduct("SKU-STK-LOW", supplier);
+        WarehouseProduct wp2 = createTestWarehouseProduct("SKU-STK-HIGH", supplier);
+        createTestStock(wp1, 5L, 0L);   // low stock (< 10)
+        createTestStock(wp2, 100L, 0L); // không low stock
 
-        /**
-         * TC_INV_063
-         * Objective : getSellable() phải = onHand - reserved - damaged
-         * Input     : onHand=50, reserved=5, damaged=2
-         * Expected  : sellable = 43
-         *
-         * ⚠️ BUG HUNTER: Nếu sellable tính sai → hiển thị tồn kho sai cho khách hàng
-         */
-        @Test
-        @DisplayName("TC_INV_063 – getSellable tính đúng onHand - reserved - damaged")
-        void TC_INV_063_inventoryStock_GetSellable_CorrectCalculation() {
-            // onHand=50, reserved=5, damaged=2 → sellable = 43
-            assertEquals(43L, inventoryStock.getSellable(),
-                    "getSellable() phải = 50 - 5 - 2 = 43");
-        }
+        ApiResponse response = inventoryService.getStocks("low_stock");
 
-        /**
-         * TC_INV_064
-         * Objective : getSellable() không trả về âm khi reserved+damaged > onHand
-         * Input     : onHand=5, reserved=10, damaged=0
-         * Expected  : getSellable() = 0 (không âm)
-         *
-         * ⚠️ BUG HUNTER: Nghiệp vụ quan trọng – số lượng bán không thể âm
-         */
-        @Test
-        @DisplayName("TC_INV_064 – getSellable không trả về âm khi reserved > onHand")
-        void TC_INV_064_inventoryStock_GetSellable_NeverNegative() {
-            InventoryStock overReserved = InventoryStock.builder()
-                    .onHand(5L).reserved(10L).damaged(0L).build();
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> data = (List<Map<String, Object>>) response.getData();
 
-            long sellable = overReserved.getSellable();
-            assertTrue(sellable >= 0,
-                    "getSellable() không được âm, thực tế = " + sellable);
-            assertEquals(0L, sellable, "getSellable() phải = 0 khi reserved > onHand");
-        }
-
-        /**
-         * TC_INV_065
-         * Objective : getAvailable() không bao gồm damaged (onHand - reserved only)
-         * Input     : onHand=50, reserved=5, damaged=2
-         * Expected  : getAvailable() = 45 (không trừ damaged)
-         *
-         * ⚠️ BUG HUNTER: getAvailable và getSellable phải có nghĩa nghiệp vụ khác nhau rõ ràng
-         */
-        @Test
-        @DisplayName("TC_INV_065 – getAvailable tính đúng onHand - reserved (không trừ damaged)")
-        void TC_INV_065_inventoryStock_GetAvailable_CorrectCalculation() {
-            // onHand=50, reserved=5, damaged=2 → available = 45
-            assertEquals(45L, inventoryStock.getAvailable(),
-                    "getAvailable() phải = 50 - 5 = 45 (không trừ damaged)");
-        }
+        // Chỉ có sản phẩm low_stock
+        assertThat(data).allMatch(d -> (Long) d.get("onHand") <= 10L);
+        assertThat(data.stream().anyMatch(d ->
+                ((Map<?, ?>) d.get("warehouseProduct")).get("sku").equals("SKU-STK-LOW"))).isTrue();
+        assertThat(data.stream().noneMatch(d ->
+                ((Map<?, ?>) d.get("warehouseProduct")).get("sku").equals("SKU-STK-HIGH"))).isTrue();
     }
 
-    // ============================================================
-    // Helper Methods
-    // ============================================================
+    @Test
+    @DisplayName("TC_INVENTORY_042 - Lấy tồn kho với filter 'out_of_stock'")
+    void TC_INVENTORY_042_getStocks_outOfStockFilter() {
+        Supplier supplier = createTestSupplier("STK03");
+        WarehouseProduct wp1 = createTestWarehouseProduct("SKU-STK-OUT", supplier);
+        WarehouseProduct wp2 = createTestWarehouseProduct("SKU-STK-INSTOCK", supplier);
+        createTestStock(wp1, 0L, 0L);  // hết hàng
+        createTestStock(wp2, 3L, 0L);  // còn hàng
 
-    /** Build POItemRequest helper */
-    private POItemRequest buildPoItem(String sku, Long quantity, Double unitCost) {
-        POItemRequest item = new POItemRequest();
-        item.setSku(sku);
-        item.setQuantity(quantity);
-        item.setUnitCost(unitCost);
-        item.setWarrantyMonths(12);
-        item.setInternalName("Product " + sku);
-        return item;
+        ApiResponse response = inventoryService.getStocks("out_of_stock");
+
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> data = (List<Map<String, Object>>) response.getData();
+
+        assertThat(data).allMatch(d -> (Long) d.get("onHand") <= 0L);
+        assertThat(data.stream().anyMatch(d ->
+                ((Map<?, ?>) d.get("warehouseProduct")).get("sku").equals("SKU-STK-OUT"))).isTrue();
     }
 
-    /** Build CreatePORequest helper */
-    private CreatePORequest buildCreatePORequest(String poCode, String taxCode,
-                                                  List<POItemRequest> items) {
-        CreateSupplierRequest supplierReq = new CreateSupplierRequest();
-        supplierReq.setTaxCode(taxCode);
-        supplierReq.setName("Test NCC");
+    @Test
+    @DisplayName("TC_INVENTORY_043 - Lấy tồn kho khi không có record nào")
+    void TC_INVENTORY_043_getStocks_empty() {
+        inventoryStockRepository.deleteAll();
 
-        CreatePORequest req = new CreatePORequest();
-        req.setPoCode(poCode);
-        req.setCreatedBy("test_admin");
-        req.setSupplier(supplierReq);
-        req.setItems(items);
-        return req;
+        ApiResponse response = inventoryService.getStocks(null);
+
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<?> data = (List<?>) response.getData();
+        assertThat(data).isEmpty();
     }
 
-    /** Build PurchaseOrderItem entity helper */
-    private PurchaseOrderItem buildPoItem_Entity(String sku, Long quantity) {
-        PurchaseOrderItem poItem = new PurchaseOrderItem();
-        poItem.setId(1L);
-        poItem.setSku(sku);
-        poItem.setQuantity(quantity);
-        poItem.setUnitCost(15_000_000.0);
-        poItem.setWarehouseProduct(warehouseProduct);
-        poItem.setProductDetails(new ArrayList<>());
-        poItem.setWarrantyMonths(12);
-        return poItem;
+    // =========================================================
+    // *** TEST GROUP 12: getStockDetails ***
+    // Mục đích: Kiểm tra lấy danh sách serial theo warehouse product
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_044 - Lấy danh sách serial theo warehouse product thành công")
+    void TC_INVENTORY_044_getStockDetails_success() {
+        Supplier supplier = createTestSupplier("STDET01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-DET-001", supplier);
+        createTestProductDetail("SN-DET-001", wp, ProductStatus.IN_STOCK, 1000000.0);
+        createTestProductDetail("SN-DET-002", wp, ProductStatus.SOLD, 1000000.0);
+
+        ApiResponse response = inventoryService.getStockDetails(wp.getId());
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Danh sách Serial");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> data = (List<Map<String, Object>>) response.getData();
+        assertThat(data).hasSize(2);
+
+        // Kiểm tra từng phần tử
+        Map<String, Object> det1 = data.stream()
+                .filter(d -> d.get("serialNumber").equals("SN-DET-001")).findFirst().orElseThrow();
+        assertThat(det1.get("status")).isEqualTo(ProductStatus.IN_STOCK);
+        assertThat(det1.get("importPrice")).isEqualTo(1000000.0);
+        assertThat(det1.get("importDate")).isNotNull();
+
+        Map<String, Object> det2 = data.stream()
+                .filter(d -> d.get("serialNumber").equals("SN-DET-002")).findFirst().orElseThrow();
+        assertThat(det2.get("status")).isEqualTo(ProductStatus.SOLD);
     }
 
-    // ================================================================
-    // COVERAGE COMPLETENESS – Branch/Path tests for uncovered code
-    // ================================================================
-    @Nested
-    @DisplayName("Branch Coverage Completeness Tests")
-    class BranchCoverageTests {
-
-        // ── getOrCreateSupplier: phone lookup branch ──────────────────
-        @Test
-        @DisplayName("TC_INV_066_getOrCreateSupplier_ExistingPhone_ReturnsByPhone")
-        void TC_INV_066_getOrCreateSupplier_ExistingPhone_ReturnsByPhone() {
-            CreateSupplierRequest req = new CreateSupplierRequest();
-            req.setTaxCode(null);
-            req.setEmail(null);
-            req.setPhone("0900000001");
-
-            when(supplierRepository.findByTaxCode(any())).thenReturn(Optional.empty());
-            when(supplierRepository.findByEmail(any())).thenReturn(Optional.empty());
-            // phone lookup branch → supplier exists
-            Supplier byPhone = Supplier.builder().id(99L).phone("0900000001").build();
-            when(supplierRepository.findByPhone("0900000001")).thenReturn(Optional.of(byPhone));
-
-            ApiResponse resp = inventoryService.getOrCreateSupplier(req);
-
-            assertTrue(resp.isSuccess());
-            verify(supplierRepository, never()).save(any());
-        }
-
-        // ── createWarehouseProduct: no supplierId ─────────────────────
-        @Test
-        @DisplayName("TC_INV_067_createWarehouseProduct_NullSupplierId_SkipsSupplierLookup")
-        void TC_INV_067_createWarehouseProduct_NullSupplierId_SkipsSupplierLookup() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-NEW-NO-SUPP");
-            req.setInternalName("No Supplier Product");
-            req.setSupplierId(null); // no supplier
-            req.setTechSpecsJson(null); // should default to {}
-
-            when(warehouseProductRepository.findBySku("SKU-NEW-NO-SUPP")).thenReturn(Optional.empty());
-            when(warehouseProductRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-            ApiResponse resp = inventoryService.createWarehouseProduct(req);
-
-            assertTrue(resp.isSuccess());
-            verify(supplierRepository, never()).findById(anyLong());
-        }
-
-        // ── updateWarehouseProduct: supplierId=null branch ────────────
-        @Test
-        @DisplayName("TC_INV_068_updateWarehouseProduct_NullSupplierId_SkipsSupplierUpdate")
-        void TC_INV_068_updateWarehouseProduct_NullSupplierId_SkipsSupplierUpdate() {
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-LAPTOP-001"); // same SKU → no duplicate check
-            req.setInternalName("Updated Name");
-            req.setSupplierId(null);
-            req.setTechSpecsJson("{}");
-
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(warehouseProduct));
-            when(warehouseProductRepository.save(any())).thenReturn(warehouseProduct);
-
-            ApiResponse resp = inventoryService.updateWarehouseProduct(10L, req);
-
-            assertTrue(resp.isSuccess());
-            verify(supplierRepository, never()).findById(anyLong());
-        }
-
-        // ── updateWarehouseProduct: different SKU but new SKU already exists
-        @Test
-        @DisplayName("TC_INV_069_updateWarehouseProduct_NewSkuAlreadyExists_UpdateSuccessfully")
-        void TC_INV_069_updateWarehouseProduct_NewSkuAlreadyExists_UpdatesSkuWhenNotDuplicate() {
-            // When new SKU is same as existing → no duplicate check, update SKU field path
-            CreateWarehouseProductRequest req = new CreateWarehouseProductRequest();
-            req.setSku("SKU-DIFFERENT");
-            req.setInternalName("Changed");
-            req.setSupplierId(null);
-            req.setTechSpecsJson("{}");
-
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(warehouseProduct));
-            when(warehouseProductRepository.findBySku("SKU-DIFFERENT")).thenReturn(Optional.empty());
-            when(warehouseProductRepository.save(any())).thenReturn(warehouseProduct);
-
-            ApiResponse resp = inventoryService.updateWarehouseProduct(10L, req);
-
-            assertTrue(resp.isSuccess());
-        }
-
-        // ── createPurchaseOrder: new supplier created (orElseGet branch) ─
-        @Test
-        @DisplayName("TC_INV_070_createPurchaseOrder_NewSupplierCreated_SavesNewSupplier")
-        void TC_INV_070_createPurchaseOrder_NewSupplier_CreatesAndSaves() {
-            CreatePORequest req = new CreatePORequest();
-            CreateSupplierRequest sreq = new CreateSupplierRequest();
-            sreq.setTaxCode("MST-NEW-999");
-            sreq.setName("NCC Mới");
-            sreq.setContactName("Người Liên Hệ");
-            sreq.setEmail("new@ncc.com");
-            sreq.setPhone("0912345678");
-            sreq.setAddress("HCM");
-            req.setSupplier(sreq);
-            req.setPoCode("PO-NEW-001");
-            req.setCreatedBy("admin");
-
-            CreatePOItemRequest item = new CreatePOItemRequest();
-            item.setSku("SKU-EXIST-001");
-            item.setQuantity(2L);
-            item.setUnitCost(10_000_000.0);
-            item.setWarrantyMonths(12);
-            item.setInternalName("Product A");
-            item.setTechSpecsJson("{\"ram\":\"8GB\"}");
-            req.setItems(List.of(item));
-
-            Supplier newSupplier = Supplier.builder().id(100L).name("NCC Mới").taxCode("MST-NEW-999").build();
-
-            // taxCode NOT found → orElseGet creates new supplier
-            when(supplierRepository.findByTaxCode("MST-NEW-999")).thenReturn(Optional.empty());
-            when(supplierRepository.save(any())).thenReturn(newSupplier);
-            when(warehouseProductRepository.findBySku("SKU-EXIST-001")).thenReturn(Optional.of(warehouseProduct));
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
-
-            ApiResponse resp = inventoryService.createPurchaseOrder(req);
-
-            assertTrue(resp.isSuccess());
-            verify(supplierRepository, atLeastOnce()).save(any());
-        }
-
-        // ── createPurchaseOrder: new WP created (orElseGet inside items) ─
-        @Test
-        @DisplayName("TC_INV_071_createPurchaseOrder_NewWP_NullInternalNameAndTechSpecs_DefaultsApplied")
-        void TC_INV_071_createPurchaseOrder_NewWP_NullFields_Defaults() {
-            CreatePORequest req = new CreatePORequest();
-            CreateSupplierRequest sreq = new CreateSupplierRequest();
-            sreq.setTaxCode("0123456789");
-            req.setSupplier(sreq);
-            req.setPoCode("PO-NWP-001");
-
-            CreatePOItemRequest item = new CreatePOItemRequest();
-            item.setSku("SKU-BRAND-NEW");
-            item.setQuantity(1L);
-            item.setUnitCost(5_000_000.0);
-            item.setWarrantyMonths(6);
-            item.setInternalName(null);     // null → default "Sản phẩm mới - SKU"
-            item.setTechSpecsJson(null);    // null → default "{}"
-            req.setItems(List.of(item));
-
-            when(supplierRepository.findByTaxCode("0123456789")).thenReturn(Optional.of(supplier));
-            // SKU NOT found → creates new WP
-            when(warehouseProductRepository.findBySku("SKU-BRAND-NEW")).thenReturn(Optional.empty());
-            when(warehouseProductRepository.save(any())).thenReturn(warehouseProduct);
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
-
-            ApiResponse resp = inventoryService.createPurchaseOrder(req);
-
-            assertTrue(resp.isSuccess());
-        }
-
-        // ── completePurchaseOrder: DataIntegrityViolationException with "Duplicate entry" ─
-        @Test
-        @DisplayName("TC_INV_072_completePurchaseOrder_DuplicateEntryException_ReturnsError")
-        void TC_INV_072_completePurchaseOrder_DataIntegrityDuplicate_ReturnsError() {
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(List.of("SN-DUP-999"));
-            req.setSerials(List.of(serialReq));
-
-            PurchaseOrderItem item = buildPoItem_Entity("SKU-LAPTOP-001", 1L);
-            purchaseOrder.setItems(List.of(item));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber("SN-DUP-999")).thenReturn(false);
-            when(inventoryStockRepository.findByWarehouseProduct_Id(anyLong())).thenReturn(Optional.of(inventoryStock));
-            // purchaseOrderRepository.save throws DataIntegrityViolationException containing "Duplicate entry"
-            when(purchaseOrderRepository.save(any()))
-                    .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Duplicate entry 'SN-DUP-999' for key 'serial'"));
-
-            ApiResponse resp = inventoryService.completePurchaseOrder(req);
-
-            assertFalse(resp.isSuccess());
-            assertTrue(resp.getMessage().contains("trùng lặp") || resp.getMessage().contains("Serial"));
-        }
-
-        // ── completePurchaseOrder: DataIntegrityViolationException without "Duplicate entry" ─
-        @Test
-        @DisplayName("TC_INV_073_completePurchaseOrder_OtherDataIntegrityException_ReturnsError")
-        void TC_INV_073_completePurchaseOrder_OtherDataIntegrityViolation_ReturnsError() {
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(List.of("SN-GENERIC-ERR"));
-            req.setSerials(List.of(serialReq));
-
-            PurchaseOrderItem item = buildPoItem_Entity("SKU-LAPTOP-001", 1L);
-            purchaseOrder.setItems(List.of(item));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber("SN-GENERIC-ERR")).thenReturn(false);
-            when(inventoryStockRepository.findByWarehouseProduct_Id(anyLong())).thenReturn(Optional.of(inventoryStock));
-            when(purchaseOrderRepository.save(any()))
-                    .thenThrow(new org.springframework.dao.DataIntegrityViolationException("FK constraint violation"));
-
-            ApiResponse resp = inventoryService.completePurchaseOrder(req);
-
-            assertFalse(resp.isSuccess());
-        }
-
-        // ── completePurchaseOrder: item.getProductDetails() == null ──
-        @Test
-        @DisplayName("TC_INV_074_completePurchaseOrder_NullProductDetails_InitializesNewList")
-        void TC_INV_074_completePurchaseOrder_NullProductDetails_InitializesNewList() {
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setReceivedDate(LocalDateTime.now());
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(List.of("SN-NULL-DET-001"));
-            req.setSerials(List.of(serialReq));
-
-            PurchaseOrderItem item = buildPoItem_Entity("SKU-LAPTOP-001", 1L);
-            item.setProductDetails(null); // <-- null so branch initializes new ArrayList
-            purchaseOrder.setItems(List.of(item));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber("SN-NULL-DET-001")).thenReturn(false);
-            when(inventoryStockRepository.findByWarehouseProduct_Id(anyLong())).thenReturn(Optional.of(inventoryStock));
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
-            when(supplierPayableService.createPayableFromPurchaseOrder(any()))
-                    .thenReturn(ApiResponse.success("OK", null));
-
-            ApiResponse resp = inventoryService.completePurchaseOrder(req);
-
-            assertTrue(resp.isSuccess());
-        }
-
-        // ── completePurchaseOrder: supplierPayableService returns failure ─
-        @Test
-        @DisplayName("TC_INV_075_completePurchaseOrder_PayableFailure_StillSucceeds")
-        void TC_INV_075_completePurchaseOrder_PayableServiceFails_StillReturnsSuccess() {
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setReceivedDate(LocalDateTime.now());
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(List.of("SN-PAY-FAIL-001"));
-            req.setSerials(List.of(serialReq));
-
-            PurchaseOrderItem item = buildPoItem_Entity("SKU-LAPTOP-001", 1L);
-            purchaseOrder.setItems(List.of(item));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber("SN-PAY-FAIL-001")).thenReturn(false);
-            when(inventoryStockRepository.findByWarehouseProduct_Id(anyLong())).thenReturn(Optional.of(inventoryStock));
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
-            // Payable returns error but import should still succeed
-            when(supplierPayableService.createPayableFromPurchaseOrder(any()))
-                    .thenReturn(ApiResponse.error("Lỗi tạo công nợ"));
-
-            ApiResponse resp = inventoryService.completePurchaseOrder(req);
-
-            assertTrue(resp.isSuccess(), "Nhập hàng phải thành công dù tạo công nợ lỗi");
-        }
-
-        // ── completePurchaseOrder: supplierPayableService throws exception ─
-        @Test
-        @DisplayName("TC_INV_076_completePurchaseOrder_PayableException_StillSucceeds")
-        void TC_INV_076_completePurchaseOrder_PayableException_StillReturnsSuccess() {
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setReceivedDate(LocalDateTime.now());
-
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(List.of("SN-PAYEX-001"));
-            req.setSerials(List.of(serialReq));
-
-            PurchaseOrderItem item = buildPoItem_Entity("SKU-LAPTOP-001", 1L);
-            purchaseOrder.setItems(List.of(item));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber("SN-PAYEX-001")).thenReturn(false);
-            when(inventoryStockRepository.findByWarehouseProduct_Id(anyLong())).thenReturn(Optional.of(inventoryStock));
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
-            when(supplierPayableService.createPayableFromPurchaseOrder(any()))
-                    .thenThrow(new RuntimeException("Kết nối DB lỗi"));
-
-            ApiResponse resp = inventoryService.completePurchaseOrder(req);
-
-            assertTrue(resp.isSuccess(), "Import thành công kể cả khi payable service ném exception");
-        }
-
-        // ── completePurchaseOrder: sync with Product (wp.product != null) ─
-        @Test
-        @DisplayName("TC_INV_077_completePurchaseOrder_WithLinkedProduct_SyncsStockToProduct")
-        void TC_INV_077_completePurchaseOrder_WithLinkedProduct_SyncsStock() {
-            Product linkedProduct = Product.builder().id(99L).name("Laptop Published").stockQuantity(50L).build();
-            WarehouseProduct wpWithProduct = WarehouseProduct.builder()
-                    .id(10L).sku("SKU-LAPTOP-001").internalName("Laptop")
-                    .product(linkedProduct).build();
-
-            CompletePORequest req = new CompletePORequest();
-            req.setPoId(1L);
-            req.setReceivedDate(LocalDateTime.now());
-            ProductSerialRequest serialReq = new ProductSerialRequest();
-            serialReq.setProductSku("SKU-LAPTOP-001");
-            serialReq.setSerialNumbers(List.of("SN-SYNC-001"));
-            req.setSerials(List.of(serialReq));
-
-            PurchaseOrderItem item = buildPoItem_Entity("SKU-LAPTOP-001", 1L);
-            item.setWarehouseProduct(wpWithProduct);
-            purchaseOrder.setItems(List.of(item));
-
-            when(purchaseOrderRepository.findById(1L)).thenReturn(Optional.of(purchaseOrder));
-            when(productDetailRepository.existsBySerialNumber("SN-SYNC-001")).thenReturn(false);
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L)).thenReturn(Optional.of(inventoryStock));
-            when(purchaseOrderRepository.save(any())).thenReturn(purchaseOrder);
-            when(supplierPayableService.createPayableFromPurchaseOrder(any()))
-                    .thenReturn(ApiResponse.success("OK", null));
-
-            ApiResponse resp = inventoryService.completePurchaseOrder(req);
-
-            assertTrue(resp.isSuccess());
-            // productRepository.save gọi để sync stock
-            verify(productRepository, atLeastOnce()).save(linkedProduct);
-        }
-
-        // ── getPurchaseOrders: null status → findAll ──────────────────
-        @Test
-        @DisplayName("TC_INV_078_getPurchaseOrders_NullStatus_CallsFindAll")
-        void TC_INV_078_getPurchaseOrders_NullStatus_CallsFindAll() {
-            PurchaseOrder po = PurchaseOrder.builder()
-                    .id(5L).poCode("PO-005").status(POStatus.CREATED)
-                    .supplier(supplier).orderDate(LocalDateTime.now())
-                    .items(List.of()).build();
-            when(purchaseOrderRepository.findAll()).thenReturn(List.of(po));
-
-            ApiResponse resp = inventoryService.getPurchaseOrders(null);
-
-            assertTrue(resp.isSuccess());
-            verify(purchaseOrderRepository).findAll();
-        }
-
-        // ── getPurchaseOrders: po with null supplier and null items ───
-        @Test
-        @DisplayName("TC_INV_079_getPurchaseOrders_NullSupplierAndNullItems_MapsToNA")
-        void TC_INV_079_getPurchaseOrders_NullSupplierNullItems_MapsGracefully() {
-            PurchaseOrder po = PurchaseOrder.builder()
-                    .id(6L).poCode("PO-006").status(POStatus.CREATED)
-                    .supplier(null).orderDate(LocalDateTime.now())
-                    .items(null).build(); // null supplier & null items
-            when(purchaseOrderRepository.findAll()).thenReturn(List.of(po));
-
-            ApiResponse resp = inventoryService.getPurchaseOrders(null);
-
-            assertTrue(resp.isSuccess()); // shouldnt crash
-        }
-
-        // ── getExportOrders: non-null status → findByStatus ───────────
-        @Test
-        @DisplayName("TC_INV_080_getExportOrders_NonNullStatus_CallsFindByStatus")
-        void TC_INV_080_getExportOrders_WithStatus_CallsFindByStatus() {
-            when(exportOrderRepository.findByStatus(ExportStatus.COMPLETED))
-                    .thenReturn(List.of());
-
-            ApiResponse resp = inventoryService.getExportOrders(ExportStatus.COMPLETED);
-
-            assertTrue(resp.isSuccess());
-            verify(exportOrderRepository).findByStatus(ExportStatus.COMPLETED);
-        }
-
-        // ── getPurchaseOrderDetail: supplier=null, item.wp=null, productDetails=null ─
-        @Test
-        @DisplayName("TC_INV_081_getPurchaseOrderDetail_NullSupplierAndNullWP_MapsGracefully")
-        void TC_INV_081_getPurchaseOrderDetail_NullSupplierAndNullWP_NoNPE() {
-            PurchaseOrderItem item = new PurchaseOrderItem();
-            item.setId(1L);
-            item.setSku("SKU-LAPTOP-001");
-            item.setQuantity(1L);
-            item.setUnitCost(null);  // null unitCost → ternary default 0.0
-            item.setWarrantyMonths(12);
-            item.setWarehouseProduct(null);   // null wp → wpInfo = null
-            item.setProductDetails(null);      // null productDetails → detailInfos = null
-
-            PurchaseOrder po = PurchaseOrder.builder()
-                    .id(99L).poCode("PO-NULL").status(POStatus.CREATED)
-                    .supplier(null) // null → supplierInfo stays null
-                    .orderDate(LocalDateTime.now())
-                    .items(List.of(item)).build();
-
-            when(purchaseOrderRepository.findById(99L)).thenReturn(Optional.of(po));
-
-            ApiResponse resp = inventoryService.getPurchaseOrderDetail(99L);
-
-            assertTrue(resp.isSuccess()); // No NPE
-        }
-
-        // ── getExportOrderDetail: item.wp=null, serialNumbers=null ───
-        @Test
-        @DisplayName("TC_INV_082_getExportOrderDetail_NullWPAndNullSerials_MapsGracefully")
-        void TC_INV_082_getExportOrderDetail_NullWPAndSerials_NoNPE() {
-            ExportOrderItem eoItem = ExportOrderItem.builder()
-                    .id(1L).sku("SKU-X").quantity(1L).totalCost(10_000.0)
-                    .warehouseProduct(null)   // null wp → wpInfo = null
-                    .serialNumbers(null)       // null → List.of()
-                    .build();
-
-            ExportOrder eo = ExportOrder.builder()
-                    .id(77L).exportCode("EX-NULL").status(ExportStatus.COMPLETED)
-                    .exportDate(LocalDateTime.now())
-                    .items(List.of(eoItem)).build();
-
-            when(exportOrderRepository.findById(77L)).thenReturn(Optional.of(eo));
-
-            ApiResponse resp = inventoryService.getExportOrderDetail(77L);
-
-            assertTrue(resp.isSuccess());
-        }
-
-        // ── getStocks: exception path ─────────────────────────────────
-        @Test
-        @DisplayName("TC_INV_083_getStocks_ExceptionThrown_ReturnsErrorResponse")
-        void TC_INV_083_getStocks_RepositoryThrowsException_ReturnsError() {
-            when(inventoryStockRepository.findAll())
-                    .thenThrow(new RuntimeException("DB connection refused"));
-
-            ApiResponse resp = inventoryService.getStocks(null);
-
-            assertFalse(resp.isSuccess());
-        }
-
-        // ── getStocks: null onHand/reserved/damaged ──────────────────
-        @Test
-        @DisplayName("TC_INV_084_getStocks_NullStockFields_DefaultsToZero")
-        void TC_INV_084_getStocks_NullFields_DefaultsToZero() {
-            InventoryStock stockWithNulls = InventoryStock.builder()
-                    .id(2L)
-                    .warehouseProduct(warehouseProduct)
-                    .onHand(null)    // null → ternary returns 0
-                    .reserved(null)
-                    .damaged(null)
-                    .build();
-            when(inventoryStockRepository.findAll()).thenReturn(List.of(stockWithNulls));
-
-            ApiResponse resp = inventoryService.getStocks(null);
-
-            assertTrue(resp.isSuccess()); // must not NPE
-        }
-
-        // ── getStocks: warehouseProduct=null ─────────────────────────
-        @Test
-        @DisplayName("TC_INV_085_getStocks_NullWarehouseProduct_SkipsProductInfo")
-        void TC_INV_085_getStocks_NullWarehouseProduct_NoNPE() {
-            InventoryStock stockNullWP = InventoryStock.builder()
-                    .id(3L).warehouseProduct(null) // no wp → block skipped
-                    .onHand(10L).reserved(0L).damaged(0L).build();
-            when(inventoryStockRepository.findAll()).thenReturn(List.of(stockNullWP));
-
-            ApiResponse resp = inventoryService.getStocks(null);
-
-            assertTrue(resp.isSuccess());
-        }
-
-        // ── exportForSale: orderId=null → no GHN call ────────────────
-        @Test
-        @DisplayName("TC_INV_086_exportForSale_NullOrderId_SkipsGHNCreation")
-        void TC_INV_086_exportForSale_NullOrderId_SkipsGHN() {
-            SaleExportRequest req = new SaleExportRequest();
-            req.setOrderId(null); // no GHN
-            req.setCreatedBy("admin");
-
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(List.of("SN-SALE-NO-GHN"));
-            req.setItems(List.of(itemReq));
-
-            productDetail.setStatus(ProductStatus.IN_STOCK);
-            productDetail.setSerialNumber("SN-SALE-NO-GHN");
-            productDetail.setImportPrice(15_000_000.0);
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001")).thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L)).thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.findBySerialNumber("SN-SALE-NO-GHN")).thenReturn(Optional.of(productDetail));
-            when(productDetailRepository.save(any())).thenReturn(productDetail);
-            when(inventoryStockRepository.save(any())).thenReturn(inventoryStock);
-            when(exportOrderRepository.save(any())).thenReturn(new ExportOrder());
-
-            ApiResponse resp = inventoryService.exportForSale(req);
-
-            assertTrue(resp.isSuccess());
-            verify(orderRepository, never()).findById(anyLong());
-        }
-
-        // ── exportForSale with orderId and product with linked Product (syncReserved) ─
-        @Test
-        @DisplayName("TC_INV_087_exportForSale_WithOrderId_GHNExceptionIgnored_StillSucceeds")
-        void TC_INV_087_exportForSale_WithOrderId_GHNFails_StillSucceeds() {
-            SaleExportRequest req = new SaleExportRequest();
-            req.setOrderId(200L); // GHN will be triggered
-            req.setCreatedBy("admin");
-
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(List.of("SN-GHN-FAIL"));
-            req.setItems(List.of(itemReq));
-
-            productDetail.setStatus(ProductStatus.IN_STOCK);
-            productDetail.setSerialNumber("SN-GHN-FAIL");
-            productDetail.setImportPrice(15_000_000.0);
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001")).thenReturn(Optional.of(warehouseProduct));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L)).thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.findBySerialNumber("SN-GHN-FAIL")).thenReturn(Optional.of(productDetail));
-            when(productDetailRepository.save(any())).thenReturn(productDetail);
-            when(inventoryStockRepository.save(any())).thenReturn(inventoryStock);
-            when(exportOrderRepository.save(any())).thenReturn(new ExportOrder());
-            // GHN: orderRepository.findById throws → caught internally
-            when(orderRepository.findById(200L)).thenThrow(new RuntimeException("Order not found"));
-
-            ApiResponse resp = inventoryService.exportForSale(req);
-
-            assertTrue(resp.isSuccess(), "exportForSale thành công kể cả khi GHN tạo lỗi");
-        }
-
-        // ── exportForSale with linked Product → syncReservedWithProduct ─
-        @Test
-        @DisplayName("TC_INV_088_exportForSale_WithLinkedProduct_SyncsReservedToProduct")
-        void TC_INV_088_exportForSale_LinkedProduct_SyncsReserved() {
-            Product linkedProd = Product.builder().id(1L).name("Laptop A")
-                    .stockQuantity(50L).reservedQuantity(5L).build();
-            WarehouseProduct wpLinked = WarehouseProduct.builder()
-                    .id(10L).sku("SKU-LAPTOP-001").internalName("Laptop")
-                    .product(linkedProd).build();
-
-            SaleExportRequest req = new SaleExportRequest();
-            req.setOrderId(null);
-            req.setCreatedBy("admin");
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(List.of("SN-LINKED-001"));
-            req.setItems(List.of(itemReq));
-
-            productDetail.setStatus(ProductStatus.IN_STOCK);
-            productDetail.setSerialNumber("SN-LINKED-001");
-            productDetail.setImportPrice(15_000_000.0);
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001")).thenReturn(Optional.of(wpLinked));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L)).thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.findBySerialNumber("SN-LINKED-001")).thenReturn(Optional.of(productDetail));
-            when(productDetailRepository.save(any())).thenReturn(productDetail);
-            when(inventoryStockRepository.save(any())).thenReturn(inventoryStock);
-            when(exportOrderRepository.save(any())).thenReturn(new ExportOrder());
-            when(productRepository.save(any())).thenReturn(linkedProd);
-
-            ApiResponse resp = inventoryService.exportForSale(req);
-
-            assertTrue(resp.isSuccess());
-            verify(productRepository, atLeastOnce()).save(linkedProd);
-        }
-
-        // ── exportForWarranty: SOLD status (neither condition = true for error) ─
-        @Test
-        @DisplayName("TC_INV_089_exportForWarranty_SoldSerial_ProceedsNormally")
-        void TC_INV_089_exportForWarranty_SoldStatus_AllowsWarranty() {
-            // pd.status = SOLD → condition (!=IN_STOCK && !=SOLD) is FALSE → không return error
-            ProductDetail soldDetail = ProductDetail.builder()
-                    .id(2L).serialNumber("SN-SOLD-001")
-                    .status(ProductStatus.SOLD) // SOLD is allowed for warranty
-                    .importPrice(10_000_000.0)
-                    .warehouseProduct(warehouseProduct)
-                    .build();
-
-            WarrantyExportRequest req = new WarrantyExportRequest();
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(List.of("SN-SOLD-001"));
-            req.setItems(List.of(itemReq));
-
-            when(productDetailRepository.findBySerialNumber("SN-SOLD-001")).thenReturn(Optional.of(soldDetail));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L)).thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.save(any())).thenReturn(soldDetail);
-            when(inventoryStockRepository.save(any())).thenReturn(inventoryStock);
-            when(exportOrderRepository.save(any())).thenReturn(new ExportOrder());
-
-            ApiResponse resp = inventoryService.exportForWarranty(req);
-
-            assertTrue(resp.isSuccess(), "SOLD serial phải được cho phép xuất bảo hành");
-        }
-
-        // ── syncStockWithProduct: wp.product != null ─────────────────
-        @Test
-        @DisplayName("TC_INV_090_syncStock_WithLinkedProduct_UpdatesProductStockQty")
-        void TC_INV_090_syncStockWithProduct_ProductNotNull_SavesProduct() {
-            // Trigger syncStockWithProduct indirectly via createExportOrder with a product linked WP
-            Product linkedProd = Product.builder().id(1L).name("Laptop B").stockQuantity(50L).build();
-            WarehouseProduct wpLinked = WarehouseProduct.builder()
-                    .id(10L).sku("SKU-LAPTOP-001").internalName("Laptop")
-                    .product(linkedProd).build();
-
-            CreateExportOrderRequest req = new CreateExportOrderRequest();
-            req.setCreatedBy("admin");
-            ExportItemRequest itemReq = new ExportItemRequest();
-            itemReq.setProductSku("SKU-LAPTOP-001");
-            itemReq.setSerialNumbers(List.of("SN-SYNC-PROD-001"));
-            req.setItems(List.of(itemReq));
-
-            productDetail.setStatus(ProductStatus.IN_STOCK);
-            productDetail.setSerialNumber("SN-SYNC-PROD-001");
-            productDetail.setImportPrice(15_000_000.0);
-
-            when(warehouseProductRepository.findBySku("SKU-LAPTOP-001")).thenReturn(Optional.of(wpLinked));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L)).thenReturn(Optional.of(inventoryStock));
-            when(productDetailRepository.findBySerialNumber("SN-SYNC-PROD-001")).thenReturn(Optional.of(productDetail));
-            when(productDetailRepository.save(any())).thenReturn(productDetail);
-            when(inventoryStockRepository.save(any())).thenReturn(inventoryStock);
-            when(exportOrderRepository.save(any())).thenReturn(new ExportOrder());
-            when(productRepository.save(any())).thenReturn(linkedProd);
-
-            ApiResponse resp = inventoryService.createExportOrder(req);
-
-            assertTrue(resp.isSuccess());
-            verify(productRepository).save(linkedProd); // syncStockWithProduct was called
-        }
-
-        // ── syncReservedQuantity: wp.product != null → syncReservedWithProduct ─
-        @Test
-        @DisplayName("TC_INV_091_syncReservedQuantity_WithLinkedProduct_UpdatesProductReserved")
-        void TC_INV_091_syncReservedQuantity_LinkedProduct_SyncsReserved() {
-            Product linkedProd = Product.builder().id(1L).name("Laptop C").reservedQuantity(5L).build();
-            WarehouseProduct wpLinked = WarehouseProduct.builder()
-                    .id(10L).sku("SKU-LAPTOP-001").product(linkedProd).build();
-
-            when(warehouseProductRepository.findById(10L)).thenReturn(Optional.of(wpLinked));
-            when(inventoryStockRepository.findByWarehouseProduct_Id(10L)).thenReturn(Optional.of(inventoryStock));
-            when(inventoryStockRepository.save(any())).thenReturn(inventoryStock);
-            when(productRepository.save(any())).thenReturn(linkedProd);
-
-            inventoryService.syncReservedQuantity(10L, 8L);
-
-            verify(inventoryStockRepository).save(any());
-            verify(productRepository).save(linkedProd); // syncReservedWithProduct was called
-        }
+    @Test
+    @DisplayName("TC_INVENTORY_045 - Lấy danh sách serial khi warehouse product không tồn tại → exception")
+    void TC_INVENTORY_045_getStockDetails_notFound() {
+        ApiResponse response = inventoryService.getStockDetails(999999L);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("Lỗi lấy chi tiết serial");
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_046 - Lấy danh sách serial khi không có serial nào")
+    void TC_INVENTORY_046_getStockDetails_noSerials() {
+        Supplier supplier = createTestSupplier("STDET02");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-DET-002", supplier);
+
+        ApiResponse response = inventoryService.getStockDetails(wp.getId());
+
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<?> data = (List<?>) response.getData();
+        assertThat(data).isEmpty();
+    }
+
+    // =========================================================
+    // *** TEST GROUP 13: exportForSale ***
+    // Mục đích: Kiểm tra xuất kho khi bán hàng
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_047 - Xuất kho bán hàng thành công")
+    @Transactional
+    void TC_INVENTORY_047_exportForSale_success() {
+        Supplier supplier = createTestSupplier("SALE01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-SALE-001", supplier);
+        createTestProductDetail("SN-SALE-001", wp, ProductStatus.IN_STOCK, 3000000.0);
+        InventoryStock stock = createTestStock(wp, 1L, 1L); // reserved 1
+        long exportBefore = exportOrderRepository.count();
+
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-SALE-001");
+        itemReq.setSerialNumbers(List.of("SN-SALE-001"));
+
+        SaleExportRequest req = new SaleExportRequest();
+        req.setOrderId(null); // không có orderId để tránh call GHN
+        req.setCreatedBy("seller");
+        req.setNote("Bán hàng test");
+        req.setItems(List.of(itemReq));
+
+        ApiResponse response = inventoryService.exportForSale(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Xuất kho bán hàng thành công");
+
+        // Phiếu xuất được tạo
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore + 1);
+
+        // Serial đã chuyển SOLD
+        ProductDetail pd = productDetailRepository.findBySerialNumber("SN-SALE-001").orElseThrow();
+        assertThat(pd.getStatus()).isEqualTo(ProductStatus.SOLD);
+        assertThat(pd.getSoldDate()).isNotNull();
+
+        // Tồn kho giảm và reserved giảm
+        InventoryStock updatedStock = inventoryStockRepository.findByWarehouseProduct_Id(wp.getId()).orElseThrow();
+        assertThat(updatedStock.getOnHand()).isEqualTo(0L);
+        assertThat(updatedStock.getReserved()).isEqualTo(0L); // reserved cũng được giải phóng
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_048 - Xuất kho bán hàng thất bại khi danh sách items rỗng")
+    void TC_INVENTORY_048_exportForSale_emptyItems() {
+        long exportBefore = exportOrderRepository.count();
+
+        SaleExportRequest req = new SaleExportRequest();
+        req.setItems(List.of()); // rỗng
+
+        ApiResponse response = inventoryService.exportForSale(req);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("Danh sách sản phẩm xuất không được để trống");
+
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_049 - Xuất kho bán hàng thất bại khi items null")
+    void TC_INVENTORY_049_exportForSale_nullItems() {
+        long exportBefore = exportOrderRepository.count();
+
+        SaleExportRequest req = new SaleExportRequest();
+        req.setItems(null);
+
+        ApiResponse response = inventoryService.exportForSale(req);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("Danh sách sản phẩm xuất không được để trống");
+
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_050 - Xuất kho bán hàng thất bại khi serial không ở trạng thái IN_STOCK")
+    @Transactional
+    void TC_INVENTORY_050_exportForSale_serialNotInStock() {
+        Supplier supplier = createTestSupplier("SALE02");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-SALE-002", supplier);
+        createTestProductDetail("SN-SALE-WARRANTY", wp, ProductStatus.WARRANTY, 2000000.0);
+        createTestStock(wp, 5L, 0L);
+        long exportBefore = exportOrderRepository.count();
+
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-SALE-002");
+        itemReq.setSerialNumbers(List.of("SN-SALE-WARRANTY"));
+
+        SaleExportRequest req = new SaleExportRequest();
+        req.setItems(List.of(itemReq));
+
+        ApiResponse response = inventoryService.exportForSale(req);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("không ở trạng thái IN_STOCK");
+
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore);
+    }
+
+    // =========================================================
+    // *** TEST GROUP 14: exportForWarranty ***
+    // Mục đích: Kiểm tra xuất kho để bảo hành
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_051 - Xuất kho bảo hành thành công với serial IN_STOCK")
+    @Transactional
+    void TC_INVENTORY_051_exportForWarranty_success_inStock() {
+        Supplier supplier = createTestSupplier("WAR01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-WAR-001", supplier);
+        createTestProductDetail("SN-WAR-001", wp, ProductStatus.IN_STOCK, 5000000.0);
+        createTestStock(wp, 2L, 0L);
+        long exportBefore = exportOrderRepository.count();
+
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-WAR-001");
+        itemReq.setSerialNumbers(List.of("SN-WAR-001"));
+
+        WarrantyExportRequest req = new WarrantyExportRequest();
+        req.setNote("Bảo hành khách hàng ABC");
+        req.setItems(List.of(itemReq));
+
+        ApiResponse response = inventoryService.exportForWarranty(req);
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Xuất kho bảo hành thành công");
+
+        // Phiếu xuất bảo hành được tạo
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore + 1);
+
+        // Serial chuyển sang WARRANTY
+        ProductDetail pd = productDetailRepository.findBySerialNumber("SN-WAR-001").orElseThrow();
+        assertThat(pd.getStatus()).isEqualTo(ProductStatus.WARRANTY);
+
+        // Tồn kho giảm 1
+        InventoryStock stock = inventoryStockRepository.findByWarehouseProduct_Id(wp.getId()).orElseThrow();
+        assertThat(stock.getOnHand()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_052 - Xuất kho bảo hành thành công với serial SOLD")
+    @Transactional
+    void TC_INVENTORY_052_exportForWarranty_success_sold() {
+        Supplier supplier = createTestSupplier("WAR02");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-WAR-002", supplier);
+        createTestProductDetail("SN-WAR-SOLD", wp, ProductStatus.SOLD, 5000000.0);
+        createTestStock(wp, 1L, 0L);
+
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-WAR-002");
+        itemReq.setSerialNumbers(List.of("SN-WAR-SOLD"));
+
+        WarrantyExportRequest req = new WarrantyExportRequest();
+        req.setNote("Bảo hành sản phẩm đã bán");
+        req.setItems(List.of(itemReq));
+
+        ApiResponse response = inventoryService.exportForWarranty(req);
+
+        // Cả SOLD lẫn IN_STOCK đều có thể xuất bảo hành
+        assertThat(response.isSuccess()).isTrue();
+
+        ProductDetail pd = productDetailRepository.findBySerialNumber("SN-WAR-SOLD").orElseThrow();
+        assertThat(pd.getStatus()).isEqualTo(ProductStatus.WARRANTY);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_053 - Xuất kho bảo hành thất bại khi hết hàng trong kho")
+    @Transactional
+    void TC_INVENTORY_053_exportForWarranty_outOfStock() {
+        Supplier supplier = createTestSupplier("WAR03");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-WAR-003", supplier);
+        createTestProductDetail("SN-WAR-003", wp, ProductStatus.IN_STOCK, 5000000.0);
+        createTestStock(wp, 0L, 0L); // hết hàng
+        long exportBefore = exportOrderRepository.count();
+
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-WAR-003");
+        itemReq.setSerialNumbers(List.of("SN-WAR-003"));
+
+        WarrantyExportRequest req = new WarrantyExportRequest();
+        req.setItems(List.of(itemReq));
+
+        ApiResponse response = inventoryService.exportForWarranty(req);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("Không còn hàng trong kho");
+
+        // Không có phiếu xuất nào được tạo
+        assertThat(exportOrderRepository.count()).isEqualTo(exportBefore);
+
+        // Serial không bị thay đổi
+        ProductDetail pd = productDetailRepository.findBySerialNumber("SN-WAR-003").orElseThrow();
+        assertThat(pd.getStatus()).isEqualTo(ProductStatus.IN_STOCK);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_054 - Xuất kho bảo hành thất bại khi serial không hợp lệ")
+    @Transactional
+    void TC_INVENTORY_054_exportForWarranty_invalidSerial() {
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-ANY");
+        itemReq.setSerialNumbers(List.of("SN-NOT-EXIST-999"));
+
+        WarrantyExportRequest req = new WarrantyExportRequest();
+        req.setItems(List.of(itemReq));
+
+        assertThatThrownBy(() -> inventoryService.exportForWarranty(req))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Không tìm thấy serial cần bảo hành");
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_055 - Xuất kho bảo hành thất bại khi serial trạng thái không hợp lệ (WARRANTY)")
+    @Transactional
+    void TC_INVENTORY_055_exportForWarranty_invalidStatus() {
+        Supplier supplier = createTestSupplier("WAR04");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-WAR-004", supplier);
+        // Đặt serial ở trạng thái WARRANTY (không phải IN_STOCK hoặc SOLD)
+        createTestProductDetail("SN-WAR-ALREADY", wp, ProductStatus.WARRANTY, 5000000.0);
+        createTestStock(wp, 1L, 0L);
+
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-WAR-004");
+        itemReq.setSerialNumbers(List.of("SN-WAR-ALREADY"));
+
+        WarrantyExportRequest req = new WarrantyExportRequest();
+        req.setItems(List.of(itemReq));
+
+        ApiResponse response = inventoryService.exportForWarranty(req);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("Serial không thể xuất bảo hành");
+    }
+
+    // =========================================================
+    // *** TEST GROUP 15: syncReservedQuantity ***
+    // Mục đích: Kiểm tra đồng bộ số lượng reserved
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_056 - Đồng bộ reserved quantity thành công")
+    @Transactional
+    void TC_INVENTORY_056_syncReservedQuantity_success() {
+        Supplier supplier = createTestSupplier("SYNC01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-SYNC-001", supplier);
+        Product product = createTestProduct("SKU-SYNC-001", wp);
+        createTestStock(wp, 10L, 0L);
+
+        // Đồng bộ reserved = 3
+        inventoryService.syncReservedQuantity(wp.getId(), 3L);
+
+        // Kiểm tra InventoryStock
+        InventoryStock stock = inventoryStockRepository.findByWarehouseProduct_Id(wp.getId()).orElseThrow();
+        assertThat(stock.getReserved()).isEqualTo(3L);
+
+        // Kiểm tra Product đã được đồng bộ
+        Product updatedProduct = productRepository.findById(product.getId()).orElseThrow();
+        assertThat(updatedProduct.getReservedQuantity()).isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_057 - Đồng bộ reserved quantity khi chưa có InventoryStock (tạo mới)")
+    @Transactional
+    void TC_INVENTORY_057_syncReservedQuantity_createNewStock() {
+        Supplier supplier = createTestSupplier("SYNC02");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-SYNC-002", supplier);
+        // Không tạo InventoryStock trước
+        long stockBefore = inventoryStockRepository.count();
+
+        inventoryService.syncReservedQuantity(wp.getId(), 5L);
+
+        // InventoryStock được tạo mới
+        assertThat(inventoryStockRepository.count()).isEqualTo(stockBefore + 1);
+
+        InventoryStock stock = inventoryStockRepository.findByWarehouseProduct_Id(wp.getId()).orElseThrow();
+        assertThat(stock.getReserved()).isEqualTo(5L);
+        assertThat(stock.getOnHand()).isEqualTo(0L);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_058 - Đồng bộ reserved thất bại khi warehouseProduct không tồn tại")
+    void TC_INVENTORY_058_syncReservedQuantity_wpNotFound() {
+        assertThatThrownBy(() -> inventoryService.syncReservedQuantity(999999L, 1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy sản phẩm kho");
+    }
+
+    // =========================================================
+    // *** TEST GROUP 16: getExportOrders ***
+    // Mục đích: Kiểm tra lấy danh sách phiếu xuất với filter
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_059 - Lấy tất cả phiếu xuất không filter")
+    void TC_INVENTORY_059_getExportOrders_noFilter() {
+        exportOrderRepository.save(ExportOrder.builder()
+                .exportCode("EX-001").status(ExportStatus.CREATED)
+                .exportDate(LocalDateTime.now()).items(List.of()).build());
+        exportOrderRepository.save(ExportOrder.builder()
+                .exportCode("EX-002").status(ExportStatus.COMPLETED)
+                .exportDate(LocalDateTime.now()).items(List.of()).build());
+
+        long countInDb = exportOrderRepository.count();
+
+        ApiResponse response = inventoryService.getExportOrders(null);
+
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<ExportOrder> data = (List<ExportOrder>) response.getData();
+        assertThat(data).hasSize((int) countInDb);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_060 - Lấy phiếu xuất theo status COMPLETED")
+    void TC_INVENTORY_060_getExportOrders_filterByCompleted() {
+        exportOrderRepository.save(ExportOrder.builder()
+                .exportCode("EX-FILT-001").status(ExportStatus.CREATED)
+                .exportDate(LocalDateTime.now()).items(List.of()).build());
+        exportOrderRepository.save(ExportOrder.builder()
+                .exportCode("EX-FILT-002").status(ExportStatus.COMPLETED)
+                .exportDate(LocalDateTime.now()).items(List.of()).build());
+
+        ApiResponse response = inventoryService.getExportOrders(ExportStatus.COMPLETED);
+
+        assertThat(response.isSuccess()).isTrue();
+        @SuppressWarnings("unchecked")
+        List<ExportOrder> data = (List<ExportOrder>) response.getData();
+        assertThat(data).allMatch(e -> e.getStatus() == ExportStatus.COMPLETED);
+    }
+
+    // =========================================================
+    // *** TEST GROUP 17: cancelExportOrder ***
+    // Mục đích: Kiểm tra hủy phiếu xuất
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_061 - Hủy phiếu xuất thành công khi trạng thái CREATED")
+    void TC_INVENTORY_061_cancelExportOrder_success() {
+        ExportOrder eo = exportOrderRepository.save(ExportOrder.builder()
+                .exportCode("EX-CANCEL-001").status(ExportStatus.CREATED)
+                .exportDate(LocalDateTime.now()).items(List.of()).build());
+
+        ApiResponse response = inventoryService.cancelExportOrder(eo.getId());
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Đã hủy phiếu xuất thành công");
+
+        ExportOrder fromDb = exportOrderRepository.findById(eo.getId()).orElseThrow();
+        assertThat(fromDb.getStatus()).isEqualTo(ExportStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_062 - Hủy phiếu xuất thất bại khi không ở trạng thái CREATED")
+    void TC_INVENTORY_062_cancelExportOrder_wrongStatus() {
+        ExportOrder eo = exportOrderRepository.save(ExportOrder.builder()
+                .exportCode("EX-CANCEL-002").status(ExportStatus.COMPLETED)
+                .exportDate(LocalDateTime.now()).items(List.of()).build());
+
+        ApiResponse response = inventoryService.cancelExportOrder(eo.getId());
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).contains("Chỉ có thể hủy phiếu ở trạng thái chờ xử lý");
+
+        ExportOrder fromDb = exportOrderRepository.findById(eo.getId()).orElseThrow();
+        assertThat(fromDb.getStatus()).isEqualTo(ExportStatus.COMPLETED); // không đổi
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_063 - Hủy phiếu xuất thất bại khi ID không tồn tại")
+    void TC_INVENTORY_063_cancelExportOrder_notFound() {
+        assertThatThrownBy(() -> inventoryService.cancelExportOrder(999999L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy phiếu xuất");
+    }
+
+    // =========================================================
+    // *** TEST GROUP 18: getExportOrderDetail ***
+    // Mục đích: Kiểm tra lấy chi tiết phiếu xuất
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_064 - Lấy chi tiết phiếu xuất thành công")
+    @Transactional
+    void TC_INVENTORY_064_getExportOrderDetail_success() {
+        Supplier supplier = createTestSupplier("EOD01");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-EOD-001", supplier);
+
+        ExportOrder eo = ExportOrder.builder()
+                .exportCode("EX-DETAIL-001")
+                .status(ExportStatus.COMPLETED)
+                .exportDate(LocalDateTime.now())
+                .createdBy("staff")
+                .reason("Kiểm kho")
+                .note("Ghi chú xuất")
+                .build();
+
+        ExportOrderItem item = ExportOrderItem.builder()
+                .exportOrder(eo)
+                .warehouseProduct(wp)
+                .sku("SKU-EOD-001")
+                .quantity(2L)
+                .serialNumbers("SN-EOD-001,SN-EOD-002")
+                .totalCost(4000000.0)
+                .build();
+
+        eo.setItems(List.of(item));
+        exportOrderRepository.save(eo);
+
+        ApiResponse response = inventoryService.getExportOrderDetail(eo.getId());
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("Chi tiết phiếu xuất");
+
+        ExportOrderDetailResponse dto = (ExportOrderDetailResponse) response.getData();
+        assertThat(dto.getId()).isEqualTo(eo.getId());
+        assertThat(dto.getExportCode()).isEqualTo("EX-DETAIL-001");
+        assertThat(dto.getStatus()).isEqualTo("COMPLETED");
+        assertThat(dto.getCreatedBy()).isEqualTo("staff");
+        assertThat(dto.getReason()).isEqualTo("Kiểm kho");
+        assertThat(dto.getNote()).isEqualTo("Ghi chú xuất");
+        assertThat(dto.getExportDate()).isNotNull();
+
+        // Kiểm tra items
+        assertThat(dto.getItems()).hasSize(1);
+        ExportOrderDetailResponse.ExportOrderItemInfo itemInfo = dto.getItems().get(0);
+        assertThat(itemInfo.getSku()).isEqualTo("SKU-EOD-001");
+        assertThat(itemInfo.getQuantity()).isEqualTo(2L);
+        assertThat(itemInfo.getTotalCost()).isEqualTo(4000000.0);
+        assertThat(itemInfo.getSerialNumbers()).containsExactlyInAnyOrder("SN-EOD-001", "SN-EOD-002");
+
+        // Kiểm tra warehouseProduct trong item
+        assertThat(itemInfo.getWarehouseProduct()).isNotNull();
+        assertThat(itemInfo.getWarehouseProduct().getSku()).isEqualTo("SKU-EOD-001");
+        assertThat(itemInfo.getWarehouseProduct().getInternalName()).isEqualTo("Sản phẩm SKU-EOD-001");
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_065 - Lấy chi tiết phiếu xuất thất bại khi không tồn tại")
+    void TC_INVENTORY_065_getExportOrderDetail_notFound() {
+        assertThatThrownBy(() -> inventoryService.getExportOrderDetail(999999L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy phiếu xuất");
+    }
+
+    // =========================================================
+    // *** TEST GROUP 19: Edge cases và giá trị biên ***
+    // =========================================================
+
+    @Test
+    @DisplayName("TC_INVENTORY_066 - Tổng tiền phiếu nhập tính đúng khi có nhiều items")
+    @Transactional
+    void TC_INVENTORY_066_purchaseOrderDetail_totalAmountCalculation() {
+        Supplier supplier = createTestSupplier("TOTAL01");
+        WarehouseProduct wp1 = createTestWarehouseProduct("SKU-TOTAL-001", supplier);
+        WarehouseProduct wp2 = createTestWarehouseProduct("SKU-TOTAL-002", supplier);
+
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-TOTAL-001").supplier(supplier).status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now()).build();
+
+        PurchaseOrderItem item1 = PurchaseOrderItem.builder()
+                .purchaseOrder(po).sku("SKU-TOTAL-001").warehouseProduct(wp1)
+                .quantity(3L).unitCost(100000.0).warrantyMonths(12).build();
+
+        PurchaseOrderItem item2 = PurchaseOrderItem.builder()
+                .purchaseOrder(po).sku("SKU-TOTAL-002").warehouseProduct(wp2)
+                .quantity(2L).unitCost(250000.0).warrantyMonths(6).build();
+
+        po.setItems(List.of(item1, item2));
+        purchaseOrderRepository.save(po);
+
+        ApiResponse response = inventoryService.getPurchaseOrderDetail(po.getId());
+        PurchaseOrderDetailResponse dto = (PurchaseOrderDetailResponse) response.getData();
+
+        // Tổng = 3*100000 + 2*250000 = 300000 + 500000 = 800000
+        assertThat(dto.getTotalAmount()).isEqualTo(800000.0);
+        assertThat(dto.getItems()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_067 - Tổng tiền phiếu nhập khi unitCost null → tính là 0")
+    @Transactional
+    void TC_INVENTORY_067_purchaseOrderDetail_nullUnitCost() {
+        Supplier supplier = createTestSupplier("TOTAL02");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-TOTAL-003", supplier);
+
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-NULLCOST-001").supplier(supplier).status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now()).build();
+
+        PurchaseOrderItem item = PurchaseOrderItem.builder()
+                .purchaseOrder(po).sku("SKU-TOTAL-003").warehouseProduct(wp)
+                .quantity(5L).unitCost(null).warrantyMonths(12).build(); // unitCost null
+
+        po.setItems(List.of(item));
+        purchaseOrderRepository.save(po);
+
+        ApiResponse response = inventoryService.getPurchaseOrderDetail(po.getId());
+        PurchaseOrderDetailResponse dto = (PurchaseOrderDetailResponse) response.getData();
+
+        // Tổng = 0 (vì unitCost null)
+        assertThat(dto.getTotalAmount()).isEqualTo(0.0);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_068 - Xuất kho bảo hành thất bại khi serial null")
+    void TC_INVENTORY_068_exportForWarranty_nullSerial() {
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setSerialNumbers(List.of("SN-NULL-999"));
+
+        WarrantyExportRequest req = new WarrantyExportRequest();
+        req.setItems(List.of(itemReq));
+
+        assertThatThrownBy(() -> inventoryService.exportForWarranty(req))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Không tìm thấy serial cần bảo hành");
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_069 - Hoàn tất nhập hàng đồng bộ tồn kho với Product khi có liên kết")
+    @Transactional
+    void TC_INVENTORY_069_completePurchaseOrder_syncWithProduct() {
+        Supplier supplier = createTestSupplier("SYNC03");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-SYNC-003", supplier);
+        Product product = createTestProduct("SKU-SYNC-003", wp); // liên kết với product
+
+        PurchaseOrder po = PurchaseOrder.builder()
+                .poCode("PO-SYNC-003").supplier(supplier).status(POStatus.CREATED)
+                .orderDate(LocalDateTime.now()).build();
+
+        PurchaseOrderItem item = PurchaseOrderItem.builder()
+                .purchaseOrder(po).sku("SKU-SYNC-003").warehouseProduct(wp)
+                .quantity(4L).unitCost(100000.0).warrantyMonths(12).build();
+
+        po.setItems(List.of(item));
+        purchaseOrderRepository.save(po);
+
+        ProductSerialRequest serialReq = new ProductSerialRequest();
+        serialReq.setProductSku("SKU-SYNC-003");
+        serialReq.setSerialNumbers(List.of("SN-SYNC-001", "SN-SYNC-002", "SN-SYNC-003", "SN-SYNC-004"));
+
+        CompletePORequest req = new CompletePORequest();
+        req.setPoId(po.getId());
+        req.setSerials(List.of(serialReq));
+        req.setReceivedDate(LocalDateTime.now());
+
+        inventoryService.completePurchaseOrder(req);
+
+        // Kiểm tra Product.stockQuantity đã được đồng bộ = 4
+        Product updatedProduct = productRepository.findById(product.getId()).orElseThrow();
+        assertThat(updatedProduct.getStockQuantity()).isEqualTo(4L);
+    }
+
+    @Test
+    @DisplayName("TC_INVENTORY_070 - Xuất kho bán hàng đồng bộ stock và reserved với Product")
+    @Transactional
+    void TC_INVENTORY_070_exportForSale_syncProductStockAndReserved() {
+        Supplier supplier = createTestSupplier("SYNC04");
+        WarehouseProduct wp = createTestWarehouseProduct("SKU-SYNC-004", supplier);
+        Product product = createTestProduct("SKU-SYNC-004", wp);
+        product.setStockQuantity(3L);
+        product.setReservedQuantity(2L);
+        productRepository.save(product);
+
+        createTestProductDetail("SN-SYNC-SALE", wp, ProductStatus.IN_STOCK, 1000000.0);
+        createTestStock(wp, 3L, 2L);
+
+        ExportItemRequest itemReq = new ExportItemRequest();
+        itemReq.setProductSku("SKU-SYNC-004");
+        itemReq.setSerialNumbers(List.of("SN-SYNC-SALE"));
+
+        SaleExportRequest req = new SaleExportRequest();
+        req.setItems(List.of(itemReq));
+        req.setOrderId(null);
+
+        inventoryService.exportForSale(req);
+
+        // Product.stockQuantity phải giảm xuống 2
+        Product updatedProduct = productRepository.findById(product.getId()).orElseThrow();
+        assertThat(updatedProduct.getStockQuantity()).isEqualTo(2L);
+        // Product.reservedQuantity phải giảm xuống 1 (2-1)
+        assertThat(updatedProduct.getReservedQuantity()).isEqualTo(1L);
     }
 }
