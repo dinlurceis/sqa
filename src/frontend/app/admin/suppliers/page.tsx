@@ -45,7 +45,7 @@ export default function SuppliersPage() {
       return
     }
 
-    if (user?.role !== 'ADMIN' && user?.role !== 'WAREHOUSE') {
+    if (user?.role !== 'ADMIN' && user?.position !== 'WAREHOUSE') {
       toast.error('Chỉ quản trị viên và nhân viên kho mới có quyền truy cập')
       router.push('/')
       return

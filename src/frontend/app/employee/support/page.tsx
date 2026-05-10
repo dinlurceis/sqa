@@ -50,7 +50,7 @@ export default function EmployeeSupportPage() {
   // Check permission
   useEffect(() => {
     const position = employee?.position || user?.position
-    if (user?.role !== 'ADMIN' && position !== 'CSKH') {
+    if (user?.role !== 'ADMIN' && user?.position !== 'CSKH') {
       toast.error('Bạn không có quyền truy cập trang này')
       router.push('/employee')
       return

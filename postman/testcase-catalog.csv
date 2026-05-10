@@ -1,0 +1,2 @@
+"TestCaseID","L1","L2","L3","Folder","Function","Goal","Input","Expected"
+"TC_LOGIN_001","1","Đăng nhập","Đăng nhập (Login)","00 Auth Bootstrap (Optional)","Login - Customer","Đăng nhập thành công với thông tin hợp lệ","{email: {{existingUserEmail}}, password: {{defaultPassword}}}","HTTP 200"

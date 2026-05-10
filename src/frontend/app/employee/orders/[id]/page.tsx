@@ -17,7 +17,7 @@ export default function EmployeeOrderDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { employee } = useAuthStore()
-  const orderId = params.id as string
+  const orderId = typeof params?.id === 'string' ? params.id : ''
   
   const [order, setOrder] = useState<any>(null)
   const [loading, setLoading] = useState(true)

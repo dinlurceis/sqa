@@ -1,0 +1,41 @@
+[
+  {
+    "scenario": "positive_cod_order",
+    "expectedSuccess": true,
+    "createOrderProvince": "Hanoi",
+    "createOrderDistrict": "Ba Dinh",
+    "createOrderWard": "001",
+    "createOrderWardName": "Phuc Xa",
+    "createOrderAddress": "123 Example Street",
+    "createOrderNote": "Runner positive case",
+    "createOrderShippingFee": 30000,
+    "createOrderPaymentMethod": "COD",
+    "createOrderSelectedItemIds": "1,2"
+  },
+  {
+    "scenario": "negative_missing_address",
+    "expectedSuccess": false,
+    "createOrderProvince": "Hanoi",
+    "createOrderDistrict": "Ba Dinh",
+    "createOrderWard": "001",
+    "createOrderWardName": "Phuc Xa",
+    "createOrderAddress": "",
+    "createOrderNote": "Missing address negative case",
+    "createOrderShippingFee": 30000,
+    "createOrderPaymentMethod": "COD",
+    "createOrderSelectedItemIds": "1,2"
+  },
+  {
+    "scenario": "boundary_zero_shipping_fee",
+    "expectedSuccess": true,
+    "createOrderProvince": "Hanoi",
+    "createOrderDistrict": "Ba Dinh",
+    "createOrderWard": "001",
+    "createOrderWardName": "Phuc Xa",
+    "createOrderAddress": "123 Example Street",
+    "createOrderNote": "Boundary shipping fee zero",
+    "createOrderShippingFee": 0,
+    "createOrderPaymentMethod": "COD",
+    "createOrderSelectedItemIds": "1,2"
+  }
+]

@@ -8,9 +8,15 @@
     "start": "cd src/frontend && npm run start",
     "lint": "cd src/frontend && npm run lint",
     "backend": "mvnw spring-boot:run",
-    "install:frontend": "cd src/frontend && npm install"
+    "install:frontend": "cd src/frontend && npm install",
+    "postman:order": "newman run postman/OrderModule.enterprise.postman_collection.json -e postman/OrderModule.enterprise.postman_environment.json -d postman/OrderModule.runner-data.json -r cli,junit --reporter-junit-export postman/order-module-junit.xml",
+    "postman:order:ci": "npm run postman:order",
+    "postman:order:report": "newman run postman/OrderModule.enterprise.postman_collection.json -e postman/OrderModule.enterprise.postman_environment.json -d postman/OrderModule.runner-data.json -r cli,junit,json --reporter-junit-export postman/order-module-junit.xml --reporter-json-export postman/order-module-report.json && node tools/postman/parse-newman-report.js"
   },
   "keywords": ["ecommerce", "techworld", "nextjs", "spring-boot"],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "newman": "^6.2.1"
+  }
 }

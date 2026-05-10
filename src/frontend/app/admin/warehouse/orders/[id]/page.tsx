@@ -6,11 +6,12 @@ import { useRouter, useParams } from 'next/navigation'
 export default function AdminWarehouseOrderDetailRedirect() {
   const router = useRouter()
   const params = useParams()
+    const orderId = typeof params?.id === 'string' ? params.id : ''
   
   useEffect(() => {
     // Redirect to employee warehouse orders detail (same functionality)
     router.push(`/employee/warehouse/orders/${params.id}`)
-  }, [router, params.id])
+  }, [router, orderId])
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">

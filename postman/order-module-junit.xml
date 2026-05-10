@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Order Module - Enterprise QA" tests="102" time="1.512">
+  <testsuite name="00 Auth Bootstrap (Optional) / Login - Customer" id="b8e95fdb-d0ba-446d-a273-ab323ad4f672" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.052">
+    <testcase name="Response time is within threshold" time="0.020" classname="00AuthBootstrapOptionalLoginCustomer"/>
+    <testcase name="Customer login response is handled" time="0.020" classname="00AuthBootstrapOptionalLoginCustomer"/>
+  </testsuite>
+  <testsuite name="00 Auth Bootstrap (Optional) / Login - Admin" id="4801dd04-42e8-422b-80c5-863a03afaf2d" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.039">
+    <testcase name="Response time is within threshold" time="0.018" classname="00AuthBootstrapOptionalLoginAdmin"/>
+    <testcase name="Admin login response is handled" time="0.018" classname="00AuthBootstrapOptionalLoginAdmin"/>
+  </testsuite>
+  <testsuite name="00 Auth Bootstrap (Optional) / Login - Shipper" id="b32afbff-8a77-4524-b17a-a8cde7f68af7" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.049">
+    <testcase name="Response time is within threshold" time="0.018" classname="00AuthBootstrapOptionalLoginShipper"/>
+    <testcase name="Shipper login response is handled" time="0.018" classname="00AuthBootstrapOptionalLoginShipper"/>
+  </testsuite>
+  <testsuite name="00 Security &amp; JWT / JWT - Validate Customer Token" id="1d498816-413e-4e98-a61d-1788e3859ad1" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.010">
+    <testcase name="Response time is within threshold" time="0.007" classname="00SecurityAmpJwtJwtValidateCustomerToken"/>
+    <testcase name="JWT validation request is handled" time="0.007" classname="00SecurityAmpJwtJwtValidateCustomerToken"/>
+  </testsuite>
+  <testsuite name="00 Security &amp; JWT / JWT - Missing Token" id="f79d4fc7-71dc-425a-a278-c812770ea5bb" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.009" classname="00SecurityAmpJwtJwtMissingToken"/>
+    <testcase name="Unauthenticated request is rejected" time="0.009" classname="00SecurityAmpJwtJwtMissingToken"/>
+  </testsuite>
+  <testsuite name="00 Security &amp; JWT / JWT - Invalid Token" id="34cafba9-c291-405c-81ef-c6fb97c3bb7a" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.018">
+    <testcase name="Response time is within threshold" time="0.009" classname="00SecurityAmpJwtJwtInvalidToken"/>
+    <testcase name="Invalid token is rejected" time="0.009" classname="00SecurityAmpJwtJwtInvalidToken"/>
+  </testsuite>
+  <testsuite name="00 Security &amp; JWT / Security - Customer token denied on shipper endpoint" id="141bdd17-3d91-4c3a-bfec-53e5ce1acb29" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.014">
+    <testcase name="Response time is within threshold" time="0.014" classname="00SecurityAmpJwtSecurityCustomerTokenDeniedOnShipperEndpoint"/>
+    <testcase name="Customer token cannot access shipper-only API" time="0.014" classname="00SecurityAmpJwtSecurityCustomerTokenDeniedOnShipperEndpoint"/>
+  </testsuite>
+  <testsuite name="00 Security &amp; JWT / Security - Shipper token denied on admin endpoint" id="435384ec-cd68-43f5-8367-0424d931cecb" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.008">
+    <testcase name="Response time is within threshold" time="0.009" classname="00SecurityAmpJwtSecurityShipperTokenDeniedOnAdminEndpoint"/>
+    <testcase name="Shipper token cannot access admin-only API" time="0.009" classname="00SecurityAmpJwtSecurityShipperTokenDeniedOnAdminEndpoint"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Create Order - Data Driven" id="f1134d91-98b8-4725-ab1d-091b1f4b15a8" timestamp="2026-05-10T09:27:28.257Z" tests="3" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.011" classname="01CustomerOrdersCreateOrderDataDriven"/>
+    <testcase name="Create order response is handled" time="0.011" classname="01CustomerOrdersCreateOrderDataDriven"/>
+    <testcase name="Positive scenario requires auth token and is rejected without token" time="0.011" classname="01CustomerOrdersCreateOrderDataDriven"/>
+    <testcase name="Negative/validation scenario is rejected" time="0.011" classname="01CustomerOrdersCreateOrderDataDriven"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Create Order - Invalid Payment Method" id="3550ab07-02bf-4d37-a3d5-4545f5e22485" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.006" classname="01CustomerOrdersCreateOrderInvalidPaymentMethod"/>
+    <testcase name="Invalid payment method is rejected" time="0.006" classname="01CustomerOrdersCreateOrderInvalidPaymentMethod"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Create Order - Missing Token" id="d003c359-35a9-4485-ade1-3215e4b0ef03" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.007" classname="01CustomerOrdersCreateOrderMissingToken"/>
+    <testcase name="Create order without token is rejected" time="0.007" classname="01CustomerOrdersCreateOrderMissingToken"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Get My Orders - Pagination &amp; Sort" id="7be064ec-9606-4535-854f-3467dadb1f03" timestamp="2026-05-10T09:27:28.257Z" tests="5" failures="0" errors="0" time="0.010">
+    <testcase name="Response time is within threshold" time="0.005" classname="01CustomerOrdersGetMyOrdersPaginationAmpSort"/>
+    <testcase name="Get my orders is handled" time="0.005" classname="01CustomerOrdersGetMyOrdersPaginationAmpSort"/>
+    <testcase name="Envelope is valid" time="0.005" classname="01CustomerOrdersGetMyOrdersPaginationAmpSort"/>
+    <testcase name="Pagination boundary is respected" time="0.005" classname="01CustomerOrdersGetMyOrdersPaginationAmpSort"/>
+    <testcase name="Sorting is createdAt descending" time="0.005" classname="01CustomerOrdersGetMyOrdersPaginationAmpSort"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Get Order By Id" id="9237ec6d-9043-42de-bfc3-3e5c036c2b76" timestamp="2026-05-10T09:27:28.257Z" tests="3" failures="0" errors="0" time="0.010">
+    <testcase name="Response time is within threshold" time="0.009" classname="01CustomerOrdersGetOrderById"/>
+    <testcase name="Get order by id is handled" time="0.009" classname="01CustomerOrdersGetOrderById"/>
+    <testcase name="Response schema is valid" time="0.009" classname="01CustomerOrdersGetOrderById"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Get Order By Code" id="d8784998-a1c7-4d4d-b4c7-b9fa25bf8fc2" timestamp="2026-05-10T09:27:28.257Z" tests="3" failures="0" errors="0" time="0.012">
+    <testcase name="Response time is within threshold" time="0.008" classname="01CustomerOrdersGetOrderByCode"/>
+    <testcase name="Get order by code is handled" time="0.008" classname="01CustomerOrdersGetOrderByCode"/>
+    <testcase name="Code lookup returns same orderCode" time="0.008" classname="01CustomerOrdersGetOrderByCode"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Cancel Order" id="eaf9e965-ff71-4d17-a7cf-37e6751f55e9" timestamp="2026-05-10T09:27:28.257Z" tests="3" failures="0" errors="0" time="0.010">
+    <testcase name="Response time is within threshold" time="0.008" classname="01CustomerOrdersCancelOrder"/>
+    <testcase name="Cancel order is handled" time="0.008" classname="01CustomerOrdersCancelOrder"/>
+    <testcase name="Cancellation response is valid" time="0.008" classname="01CustomerOrdersCancelOrder"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Shipping Status" id="80acf86d-ed38-43f9-abff-d816ec674574" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.027">
+    <testcase name="Response time is within threshold" time="0.010" classname="01CustomerOrdersShippingStatus"/>
+    <testcase name="Shipping status request is handled" time="0.010" classname="01CustomerOrdersShippingStatus"/>
+  </testsuite>
+  <testsuite name="01 Customer Orders / Confirm Received" id="2f7474c2-cc9d-4835-9a13-e956390e21a6" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.021">
+    <testcase name="Response time is within threshold" time="0.015" classname="01CustomerOrdersConfirmReceived"/>
+    <testcase name="Confirm received is handled" time="0.015" classname="01CustomerOrdersConfirmReceived"/>
+  </testsuite>
+  <testsuite name="02 Admin Orders / Get All Orders - Filter, Page, Sort" id="d032026c-f92f-41af-bc59-5ea37e3dab29" timestamp="2026-05-10T09:27:28.257Z" tests="6" failures="0" errors="0" time="0.011">
+    <testcase name="Response time is within threshold" time="0.012" classname="02AdminOrdersGetAllOrdersFilterPageSort"/>
+    <testcase name="Get all orders is handled" time="0.012" classname="02AdminOrdersGetAllOrdersFilterPageSort"/>
+    <testcase name="Admin list returns array data" time="0.012" classname="02AdminOrdersGetAllOrdersFilterPageSort"/>
+    <testcase name="Filtering by status is respected" time="0.012" classname="02AdminOrdersGetAllOrdersFilterPageSort"/>
+    <testcase name="Pagination boundary is respected" time="0.012" classname="02AdminOrdersGetAllOrdersFilterPageSort"/>
+    <testcase name="Sorting is createdAt descending" time="0.012" classname="02AdminOrdersGetAllOrdersFilterPageSort"/>
+  </testsuite>
+  <testsuite name="02 Admin Orders / Get All Orders - Invalid Status" id="d45e22f0-a64b-4a0a-823c-84ffacf8f4e0" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.005" classname="02AdminOrdersGetAllOrdersInvalidStatus"/>
+    <testcase name="Invalid status is rejected" time="0.005" classname="02AdminOrdersGetAllOrdersInvalidStatus"/>
+  </testsuite>
+  <testsuite name="02 Admin Orders / Get Order By Id (Admin)" id="ce98e76a-5531-4f29-afa0-a8f8db512648" timestamp="2026-05-10T09:27:28.257Z" tests="3" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.006" classname="02AdminOrdersGetOrderByIdAdmin"/>
+    <testcase name="Get admin order by id is handled" time="0.006" classname="02AdminOrdersGetOrderByIdAdmin"/>
+    <testcase name="Admin order detail schema is valid" time="0.006" classname="02AdminOrdersGetOrderByIdAdmin"/>
+  </testsuite>
+  <testsuite name="02 Admin Orders / Update Order Status - Invalid" id="eb0f403b-5697-497f-afba-3bd5d8c13238" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.009" classname="02AdminOrdersUpdateOrderStatusInvalid"/>
+    <testcase name="Invalid order status is rejected" time="0.009" classname="02AdminOrdersUpdateOrderStatusInvalid"/>
+  </testsuite>
+  <testsuite name="02 Admin Orders / Mark Shipping From Ready" id="64299e41-9933-4672-9182-c304919bc556" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.012">
+    <testcase name="Response time is within threshold" time="0.015" classname="02AdminOrdersMarkShippingFromReady"/>
+    <testcase name="Mark shipping from ready is handled" time="0.015" classname="02AdminOrdersMarkShippingFromReady"/>
+  </testsuite>
+  <testsuite name="02 Admin Orders / Mark Delivered" id="803f3b40-4ff7-4687-b27b-5a50298f252b" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.013">
+    <testcase name="Response time is within threshold" time="0.012" classname="02AdminOrdersMarkDelivered"/>
+    <testcase name="Mark delivered is handled" time="0.012" classname="02AdminOrdersMarkDelivered"/>
+  </testsuite>
+  <testsuite name="02 Admin Orders / Cancel Order (Admin)" id="e6beed33-ab62-44d1-9cf6-bf922c14f334" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.011">
+    <testcase name="Response time is within threshold" time="0.011" classname="02AdminOrdersCancelOrderAdmin"/>
+    <testcase name="Admin cancel is handled" time="0.011" classname="02AdminOrdersCancelOrderAdmin"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Get Available Orders" id="2008c143-8e33-4da5-a15e-6596d10b1ccb" timestamp="2026-05-10T09:27:28.257Z" tests="3" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.009" classname="03ShipperAssignmentGetAvailableOrders"/>
+    <testcase name="Get available orders is handled" time="0.009" classname="03ShipperAssignmentGetAvailableOrders"/>
+    <testcase name="Available orders response is valid" time="0.009" classname="03ShipperAssignmentGetAvailableOrders"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Claim Order" id="59ada3c2-8650-411d-9a78-00de80c292fc" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.008">
+    <testcase name="Response time is within threshold" time="0.010" classname="03ShipperAssignmentClaimOrder"/>
+    <testcase name="Claim order is handled" time="0.010" classname="03ShipperAssignmentClaimOrder"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / My Orders" id="74e6972f-9426-4a3c-9b7c-38fa393b44f5" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.013">
+    <testcase name="Response time is within threshold" time="0.026" classname="03ShipperAssignmentMyOrders"/>
+    <testcase name="My orders response is valid" time="0.026" classname="03ShipperAssignmentMyOrders"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Start Delivery" id="196de538-93f9-4a1f-a8e7-d63735316b52" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.009">
+    <testcase name="Response time is within threshold" time="0.012" classname="03ShipperAssignmentStartDelivery"/>
+    <testcase name="Start delivery is handled" time="0.012" classname="03ShipperAssignmentStartDelivery"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Confirm Delivery" id="6b2d6f14-521d-4437-9e01-40a9e34a9e4e" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.016">
+    <testcase name="Response time is within threshold" time="0.018" classname="03ShipperAssignmentConfirmDelivery"/>
+    <testcase name="Confirm delivery is handled" time="0.018" classname="03ShipperAssignmentConfirmDelivery"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Report Failure" id="4be393b8-f06e-47cc-b312-97664859328e" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.016">
+    <testcase name="Response time is within threshold" time="0.012" classname="03ShipperAssignmentReportFailure"/>
+    <testcase name="Report failure is handled" time="0.012" classname="03ShipperAssignmentReportFailure"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Cancel Claim" id="f03e79d1-a0be-4c73-b856-2a40973fdbbc" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.014">
+    <testcase name="Response time is within threshold" time="0.010" classname="03ShipperAssignmentCancelClaim"/>
+    <testcase name="Cancel claim is handled" time="0.010" classname="03ShipperAssignmentCancelClaim"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Assignment Detail" id="6785fe68-4bb5-4a76-8480-701e19bc77f8" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.011">
+    <testcase name="Response time is within threshold" time="0.009" classname="03ShipperAssignmentAssignmentDetail"/>
+    <testcase name="Assignment detail schema is valid" time="0.009" classname="03ShipperAssignmentAssignmentDetail"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Get All Assignments" id="29b179a7-0dad-49b5-9b3b-749b8c1e6b1f" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.008">
+    <testcase name="Response time is within threshold" time="0.006" classname="03ShipperAssignmentGetAllAssignments"/>
+    <testcase name="All assignments response is valid" time="0.006" classname="03ShipperAssignmentGetAllAssignments"/>
+  </testsuite>
+  <testsuite name="03 Shipper Assignment / Get Assignment By Order" id="75ecde19-d533-4f91-afa5-96153ed5d1e5" timestamp="2026-05-10T09:27:28.257Z" tests="2" failures="0" errors="0" time="0.010">
+    <testcase name="Response time is within threshold" time="0.006" classname="03ShipperAssignmentGetAssignmentByOrder"/>
+    <testcase name="Assignment lookup by order is valid" time="0.006" classname="03ShipperAssignmentGetAssignmentByOrder"/>
+  </testsuite>
+</testsuites>

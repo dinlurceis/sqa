@@ -14,7 +14,7 @@ import Link from 'next/link'
 export default function AdminOrderDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const orderId = params.id as string
+  const orderId = typeof params?.id === 'string' ? params.id : ''
   
   const [order, setOrder] = useState<any>(null)
   const [loading, setLoading] = useState(true)

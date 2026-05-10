@@ -12,7 +12,7 @@ import ProductReviews from '@/components/product/ProductReviews'
 export default function ProductDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const productId = params.id as string
+  const productId = typeof params?.id === 'string' ? params.id : ''
   
   const [product, setProduct] = useState<any>(null)
   const [loading, setLoading] = useState(true)

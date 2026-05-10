@@ -10,12 +10,13 @@ import { inventoryApi } from '@/lib/api'
 export default function AdminExportDetailPage() {
   const router = useRouter()
   const params = useParams()
+    const orderId = typeof params?.id === 'string' ? params.id : ''
   const [order, setOrder] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     loadOrderDetail()
-  }, [params.id])
+  }, [orderId])
 
   const loadOrderDetail = async () => {
     try {

@@ -11,6 +11,7 @@ import QRScanner from '@/components/QRScanner'
 export default function AdminImportDetailPage() {
   const router = useRouter()
   const params = useParams()
+    const orderId = typeof params?.id === 'string' ? params.id : ''
   const [order, setOrder] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isCompleting, setIsCompleting] = useState(false)
@@ -20,7 +21,7 @@ export default function AdminImportDetailPage() {
 
   useEffect(() => {
     loadOrderDetail()
-  }, [params.id])
+  }, [orderId])
 
   const loadOrderDetail = async () => {
     try {

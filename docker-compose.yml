@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # Spring Boot Backend Service
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: sqa-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Database Configuration - connects to host MySQL
+      DB_URL: jdbc:mysql://host.docker.internal:3306/sqa_test?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: 123456
+      
+      # Mail Configuration (optional, set if needed)
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-this-in-production}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      
+      # SePay Payment Configuration (optional)
+      SEPAY_MERCHANT_ID: ${SEPAY_MERCHANT_ID:-}
+      SEPAY_SECRET_KEY: ${SEPAY_SECRET_KEY:-}
+      SEPAY_API_URL: ${SEPAY_API_URL:-}
+      SEPAY_API_SECRET: ${SEPAY_API_SECRET:-}
+      SEPAY_BANK_CODE: ${SEPAY_BANK_CODE:-}
+      SEPAY_BANK_ACCOUNT_NUMBER: ${SEPAY_BANK_ACCOUNT_NUMBER:-}
+      SEPAY_BANK_ACCOUNT_NAME: ${SEPAY_BANK_ACCOUNT_NAME:-}
+      
+      # GHN Shipping Configuration (optional)
+      GHN_API_URL: ${GHN_API_URL:-https://dev-online-gateway.ghn.vn/shiip/public-api}
+      GHN_API_TOKEN: ${GHN_API_TOKEN:-}
+      GHN_SHOP_ID: ${GHN_SHOP_ID:-}
+      GHN_PICK_DISTRICT_ID: ${GHN_PICK_DISTRICT_ID:-}
+    networks:
+      - sqa-network
+    restart: unless-stopped
+
+  # Next.js Frontend Service
+  frontend:
+    build:
+      context: src/frontend
+      dockerfile: Dockerfile.frontend
+    container_name: sqa-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Frontend environment variables
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    depends_on:
+      - backend
+    networks:
+      - sqa-network
+    restart: unless-stopped
+
+  # MySQL Database Service (note: this is optional if you prefer to run MySQL on host machine only)
+  # Uncomment the section below if you want to run MySQL in Docker
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: sqa-mysql
+  #   ports:
+  #     - "3306:3306"
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: 123456
+  #     MYSQL_DATABASE: sqa_test
+  #   volumes:
+  #     - mysql-data:/var/lib/mysql
+  #   networks:
+  #     - sqa-network
+  #   restart: unless-stopped
+
+  # Uncomment if using MySQL in Docker
+  # volumes:
+  #   mysql-data:
+
+networks:
+  sqa-network:
+    driver: bridge

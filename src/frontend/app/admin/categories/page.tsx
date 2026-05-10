@@ -33,7 +33,7 @@ export default function CategoriesManagementPage() {
       return
     }
 
-    if (user?.role !== 'ADMIN' && user?.role !== 'PRODUCT_MANAGER') {
+    if (user?.role !== 'ADMIN' && user?.position !== 'PRODUCT_MANAGER') {
       toast.error('Bạn không có quyền truy cập')
       router.push('/')
       return

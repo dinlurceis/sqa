@@ -1,0 +1,60 @@
+name: Postman Order Module
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'postman/**'
+      - 'package.json'
+      - '.github/workflows/postman-order-module.yml'
+  pull_request:
+    paths:
+      - 'postman/**'
+      - 'package.json'
+      - '.github/workflows/postman-order-module.yml'
+
+jobs:
+  newman:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Newman collection
+        env:
+          BASE_URL: ${{ vars.BASE_URL }}
+          CUSTOMER_TOKEN: ${{ secrets.CUSTOMER_TOKEN }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          SHIPPER_TOKEN: ${{ secrets.SHIPPER_TOKEN }}
+          INVALID_TOKEN: ${{ secrets.INVALID_TOKEN }}
+        run: |
+          npx newman run postman/OrderModule.enterprise.postman_collection.json \
+            -e postman/OrderModule.enterprise.postman_environment.json \
+            -d postman/OrderModule.runner-data.json \
+            --env-var baseUrl=${BASE_URL:-http://localhost:8080} \
+            --env-var customerToken=${CUSTOMER_TOKEN} \
+            --env-var adminToken=${ADMIN_TOKEN} \
+            --env-var shipperToken=${SHIPPER_TOKEN} \
+            --env-var invalidToken=${INVALID_TOKEN} \
+            --reporters cli,junit \
+            --reporter-junit-export postman/order-module-junit.xml
+
+      - name: Upload Newman report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-order-module-report
+          path: postman/order-module-junit.xml

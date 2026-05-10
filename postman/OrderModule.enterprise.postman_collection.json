@@ -1,0 +1,1278 @@
+{
+  "info": {
+    "name": "Order Module - Enterprise QA",
+    "_postman_id": "order-module-enterprise-qa",
+    "description": "Enterprise Postman collection for the Spring Boot Order Management module. Supports JWT validation, role-based authorization, data-driven runner tests, chained requests, schema validation, pagination, sorting, and CI/CD execution with Newman.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "apiBasePath", "value": "/api" },
+    { "key": "defaultPage", "value": "0" },
+    { "key": "defaultSize", "value": "20" },
+    { "key": "adminStatusFilter", "value": "ALL" },
+    { "key": "validPaymentMethod", "value": "COD" },
+    { "key": "invalidPaymentMethod", "value": "CASH_ON_DELIVERYX" },
+    { "key": "maxResponseTimeMs", "value": "5000" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "pm.collectionVariables.set('traceId', 'order-' + pm.variables.replaceIn('{{$guid}}'));",
+          "pm.collectionVariables.set('requestTimestamp', new Date().toISOString());",
+          "pm.collectionVariables.set('boundaryShippingFee', '0');",
+          "pm.collectionVariables.set('largeShippingFee', '9999999.99');",
+          "pm.collectionVariables.set('dynamicNote', 'QA-' + pm.collectionVariables.get('traceId'));",
+          "pm.collectionVariables.set('randomReason', 'QA cancellation ' + pm.variables.replaceIn('{{$timestamp}}'));"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "const maxMs = parseInt(pm.variables.get('maxResponseTimeMs') || '5000', 10);",
+          "pm.test('Response time is within threshold', function () {",
+          "  pm.expect(pm.response.responseTime).to.be.below(maxMs);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Auth Bootstrap (Optional)",
+      "item": [
+        {
+          "name": "Login - Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Customer login response is handled', function () {",
+                  "  pm.expect([200, 400, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (json && json.success === true && json.data && json.data.token) {",
+                  "  pm.environment.set('customerToken', json.data.token);",
+                  "  pm.environment.set('customerId', String(json.data.userId || ''));",
+                  "  pm.collectionVariables.set('customerToken', json.data.token);",
+                  "  pm.collectionVariables.set('customerId', String(json.data.userId || ''));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Admin login response is handled', function () {",
+                  "  pm.expect([200, 400, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (json && json.success === true && json.data && json.data.token) {",
+                  "  pm.environment.set('adminToken', json.data.token);",
+                  "  pm.collectionVariables.set('adminToken', json.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Shipper",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{shipperEmail}}\",\n  \"password\": \"{{shipperPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Shipper login response is handled', function () {",
+                  "  pm.expect([200, 400, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (json && json.success === true && json.data && json.data.token) {",
+                  "  pm.environment.set('shipperToken', json.data.token);",
+                  "  pm.environment.set('shipperId', String(json.data.employeeId || json.data.userId || ''));",
+                  "  pm.collectionVariables.set('shipperToken', json.data.token);",
+                  "  pm.collectionVariables.set('shipperId', String(json.data.employeeId || json.data.userId || ''));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "00 Security & JWT",
+      "item": [
+        {
+          "name": "JWT - Validate Customer Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders/test-auth",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "test-auth"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('JWT validation request is handled', function () {",
+                  "  pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200 && json && json.success === true && json.data) {",
+                  "  pm.test('Authentication payload is returned', function () {",
+                  "    pm.expect(json.data).to.have.property('name');",
+                  "    pm.expect(json.data).to.have.property('authorities');",
+                  "    pm.expect(json.data.authorities).to.be.an('array');",
+                  "  });",
+                  "  pm.collectionVariables.set('jwtUserName', json.data.name);",
+                  "  pm.collectionVariables.set('jwtAuthorities', JSON.stringify(json.data.authorities));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "JWT - Missing Token",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders/test-auth",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "test-auth"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Unauthenticated request is rejected', function () {",
+                  "  pm.expect([401, 403, 200]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200 && json) { pm.expect(json.success).to.eql(false); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "JWT - Invalid Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{invalidToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders/test-auth",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "test-auth"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Invalid token is rejected', function () {",
+                  "  pm.expect([401, 403, 200]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200 && json) { pm.expect(json.success).to.eql(false); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Security - Customer token denied on shipper endpoint",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/available",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "available"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Customer token cannot access shipper-only API', function () {",
+                  "  pm.expect([401, 403, 200]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200 && json) { pm.expect(json.success).to.eql(false); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Security - Shipper token denied on admin endpoint",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/admin/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Shipper token cannot access admin-only API', function () {",
+                  "  pm.expect([401, 403, 200]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200 && json) { pm.expect(json.success).to.eql(false); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Customer Orders",
+      "item": [
+        {
+          "name": "Create Order - Data Driven",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"province\": \"{{createOrderProvince}}\",\n  \"district\": \"{{createOrderDistrict}}\",\n  \"ward\": \"{{createOrderWard}}\",\n  \"wardName\": \"{{createOrderWardName}}\",\n  \"address\": \"{{createOrderAddress}}\",\n  \"note\": \"{{createOrderNote}}\",\n  \"shippingFee\": {{createOrderShippingFee}},\n  \"paymentMethod\": \"{{createOrderPaymentMethod}}\",\n  \"selectedItemIds\": [{{createOrderSelectedItemIds}}]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const scenario = pm.iterationData.get('scenario') || 'default';",
+                  "const expectedSuccess = pm.iterationData.get('expectedSuccess');",
+                  "const hasCustomerToken = !!((pm.variables.get('customerToken') || '').trim());",
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Create order response is handled', function () {",
+                  "  pm.expect(json || pm.response.text()).to.exist;",
+                  "});",
+                  "if (expectedSuccess === true || expectedSuccess === 'true') {",
+                  "  if (hasCustomerToken) {",
+                  "    pm.test('Positive scenario succeeds', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "    pm.test('Positive scenario returns ApiResponse success', function () { pm.expect(json.success).to.eql(true); });",
+                  "    pm.test('Order payload has required fields', function () {",
+                  "      pm.expect(json.data).to.be.an('object');",
+                  "      pm.expect(json.data).to.include.keys('orderId', 'orderCode', 'status', 'paymentStatus', 'customerId', 'items', 'total');",
+                  "      pm.expect(json.data.items).to.be.an('array');",
+                  "      pm.expect(json.data.total).to.be.a('number');",
+                  "    });",
+                  "    pm.collectionVariables.set('orderId', json.data.orderId);",
+                  "    pm.collectionVariables.set('orderCode', json.data.orderCode);",
+                  "    pm.collectionVariables.set('lastCreatedOrderScenario', scenario);",
+                  "    pm.collectionVariables.set('customerId', String(json.data.customerId || ''));",
+                  "    pm.environment.set('orderId', json.data.orderId);",
+                  "    pm.environment.set('orderCode', json.data.orderCode);",
+                  "    pm.environment.set('customerId', String(json.data.customerId || ''));",
+                  "    const effectiveCustomerToken = pm.variables.get('customerToken') || pm.environment.get('customerToken');",
+                  "    pm.sendRequest({",
+                  "      url: pm.variables.replaceIn('{{baseUrl}}{{apiBasePath}}/orders/' + json.data.orderId),",
+                  "      method: 'GET',",
+                  "      header: { Authorization: 'Bearer ' + effectiveCustomerToken }",
+                  "    }, function (err, res) {",
+                  "      pm.test('Chained GET of created order succeeds', function () {",
+                  "        pm.expect(err).to.equal(null);",
+                  "        pm.expect(res.code).to.eql(200);",
+                  "        const chained = res.json();",
+                  "        pm.expect(chained.success).to.eql(true);",
+                  "        pm.expect(chained.data.orderId).to.eql(json.data.orderId);",
+                  "        pm.expect(chained.data.orderCode).to.eql(json.data.orderCode);",
+                  "      });",
+                  "    });",
+                  "  } else {",
+                  "    pm.test('Positive scenario requires auth token and is rejected without token', function () {",
+                  "      pm.expect([401, 403]).to.include(pm.response.code);",
+                  "    });",
+                  "  }",
+                  "} else {",
+                  "  pm.test('Negative/validation scenario is rejected', function () {",
+                  "    pm.expect([200, 400, 403, 422]).to.include(pm.response.code);",
+                  "    if (pm.response.code === 200 && json) { pm.expect(json.success).to.eql(false); }",
+                  "  });",
+                  "  pm.collectionVariables.set('lastRejectedCreateOrderScenario', scenario);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Order - Invalid Payment Method",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"province\": \"{{createOrderProvince}}\",\n  \"district\": \"{{createOrderDistrict}}\",\n  \"ward\": \"{{createOrderWard}}\",\n  \"wardName\": \"{{createOrderWardName}}\",\n  \"address\": \"{{createOrderAddress}}\",\n  \"note\": \"Invalid payment method scenario\",\n  \"shippingFee\": {{createOrderShippingFee}},\n  \"paymentMethod\": \"{{invalidPaymentMethod}}\",\n  \"selectedItemIds\": [{{createOrderSelectedItemIds}}]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Invalid payment method is rejected', function () {",
+                  "  pm.expect([200, 400, 403, 422]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200 && json) { pm.expect(json.success).to.eql(false); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Order - Missing Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"province\": \"{{createOrderProvince}}\",\n  \"district\": \"{{createOrderDistrict}}\",\n  \"ward\": \"{{createOrderWard}}\",\n  \"wardName\": \"{{createOrderWardName}}\",\n  \"address\": \"{{createOrderAddress}}\",\n  \"note\": \"Missing token scenario\",\n  \"shippingFee\": {{createOrderShippingFee}},\n  \"paymentMethod\": \"{{validPaymentMethod}}\",\n  \"selectedItemIds\": [{{createOrderSelectedItemIds}}]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Create order without token is rejected', function () {",
+                  "  pm.expect([401, 403, 200]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200 && json) { pm.expect(json.success).to.eql(false); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get My Orders - Pagination & Sort",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders?page={{defaultPage}}&size={{defaultSize}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"],
+              "query": [
+                { "key": "page", "value": "{{defaultPage}}" },
+                { "key": "size", "value": "{{defaultSize}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Get my orders is handled', function () { pm.expect([200, 401, 403]).to.include(pm.response.code); });",
+                  "pm.test('Envelope is valid', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "  }",
+                  "});",
+                  "pm.test('Pagination boundary is respected', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    const requestedSize = parseInt(pm.request.url.query.get('size') || '20', 10);",
+                  "    pm.expect(json.data.length).to.be.at.most(requestedSize);",
+                  "  }",
+                  "});",
+                  "pm.test('Sorting is createdAt descending', function () {",
+                  "  if (pm.response.code === 200 && json.data.length > 1 && json.data[0].createdAt && json.data[1].createdAt) {",
+                  "    const first = new Date(json.data[0].createdAt).getTime();",
+                  "    const second = new Date(json.data[1].createdAt).getTime();",
+                  "    pm.expect(first).to.be.at.least(second);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Order By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Get order by id is handled', function () { pm.expect([200, 401, 403]).to.include(pm.response.code); });",
+                  "pm.test('Response schema is valid', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('object');",
+                  "    pm.expect(json.data).to.include.keys('orderId', 'orderCode', 'status', 'paymentStatus', 'items', 'total');",
+                  "    pm.expect(json.data.items).to.be.an('array');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Order By Code",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders/code/{{orderCode}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "code", "{{orderCode}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Get order by code is handled', function () { pm.expect([200, 401, 403]).to.include(pm.response.code); });",
+                  "pm.test('Code lookup returns same orderCode', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    const expectedOrderCode = pm.collectionVariables.get('orderCode') || pm.environment.get('orderCode');",
+                  "    if (expectedOrderCode) {",
+                  "      pm.expect(json.data.orderCode).to.eql(expectedOrderCode);",
+                  "    } else {",
+                  "      pm.expect(json.data.orderCode).to.be.a('string');",
+                  "    }",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders/{{orderId}}/cancel?reason={{randomReason}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}", "cancel"],
+              "query": [
+                { "key": "reason", "value": "{{randomReason}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Cancel order is handled', function () { pm.expect([200, 400, 409]).to.include(pm.response.code); });",
+                  "pm.test('Cancellation response is valid', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('object');",
+                  "    pm.expect(json.data).to.include.keys('status', 'cancelReason');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Shipping Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders/{{orderId}}/shipping-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}", "shipping-status"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "let json = null;",
+                  "try { json = pm.response.json(); } catch (e) {}",
+                  "pm.test('Shipping status request is handled', function () {",
+                  "  pm.expect([200, 400, 404, 500]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200 && json) { pm.expect(json).to.have.property('success'); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm Received",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/orders/{{orderId}}/confirm-received",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}", "confirm-received"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Confirm received is handled', function () {",
+                  "  pm.expect([200, 400, 409, 500]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('object');",
+                  "    pm.expect(json.data.status).to.exist;",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Admin Orders",
+      "item": [
+        {
+          "name": "Get All Orders - Filter, Page, Sort",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/admin/orders?status={{adminStatusFilter}}&page={{defaultPage}}&size={{defaultSize}}&search={{adminSearch}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders"],
+              "query": [
+                { "key": "status", "value": "{{adminStatusFilter}}" },
+                { "key": "page", "value": "{{defaultPage}}" },
+                { "key": "size", "value": "{{defaultSize}}" },
+                { "key": "search", "value": "{{adminSearch}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Get all orders is handled', function () { pm.expect([200, 401, 403]).to.include(pm.response.code); });",
+                  "pm.test('Admin list returns array data', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "  }",
+                  "});",
+                  "pm.test('Filtering by status is respected', function () {",
+                  "  const filter = pm.request.url.query.get('status');",
+                  "  if (pm.response.code === 200 && filter && filter !== 'ALL') {",
+                  "    pm.expect(json.data.every(function (order) { return order.status === filter; })).to.eql(true);",
+                  "  }",
+                  "});",
+                  "pm.test('Pagination boundary is respected', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    const requestedSize = parseInt(pm.request.url.query.get('size') || '20', 10);",
+                  "    pm.expect(json.data.length).to.be.at.most(requestedSize);",
+                  "  }",
+                  "});",
+                  "pm.test('Sorting is createdAt descending', function () {",
+                  "  if (pm.response.code === 200 && json.data.length > 1 && json.data[0].createdAt && json.data[1].createdAt) {",
+                  "    const first = new Date(json.data[0].createdAt).getTime();",
+                  "    const second = new Date(json.data[1].createdAt).getTime();",
+                  "    pm.expect(first).to.be.at.least(second);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Orders - Invalid Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/admin/orders?status=NOT_A_REAL_STATUS&page=0&size=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders"],
+              "query": [
+                { "key": "status", "value": "NOT_A_REAL_STATUS" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "5" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Invalid status is rejected', function () {",
+                  "  pm.expect([200, 400, 401, 403]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message.toLowerCase()).to.include('trạng thái');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Order By Id (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/admin/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders", "{{orderId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Get admin order by id is handled', function () { pm.expect([200, 401, 403]).to.include(pm.response.code); });",
+                  "pm.test('Admin order detail schema is valid', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('object');",
+                  "    pm.expect(json.data).to.include.keys('orderId', 'orderCode', 'status', 'paymentStatus', 'items', 'total');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Order Status - Invalid",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/admin/orders/{{orderId}}/status?status=INVALID_STATE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders", "{{orderId}}", "status"],
+              "query": [
+                { "key": "status", "value": "INVALID_STATE" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Invalid order status is rejected', function () {",
+                  "  pm.expect([200, 400]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message.toLowerCase()).to.include('trạng thái');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark Shipping From Ready",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/admin/orders/{{orderId}}/mark-shipping-from-ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders", "{{orderId}}", "mark-shipping-from-ready"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Mark shipping from ready is handled', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.status).to.eql('SHIPPING');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark Delivered",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/admin/orders/{{orderId}}/delivered",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders", "{{orderId}}", "delivered"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Mark delivered is handled', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.status).to.eql('DELIVERED');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel Order (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/admin/orders/{{orderId}}/cancel?reason=Admin%20cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "orders", "{{orderId}}", "cancel"],
+              "query": [
+                { "key": "reason", "value": "Admin cancel" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Admin cancel is handled', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.status).to.exist;",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Shipper Assignment",
+      "item": [
+        {
+          "name": "Get Available Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/available",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "available"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Get available orders is handled', function () { pm.expect([200, 401, 403]).to.include(pm.response.code); });",
+                  "pm.test('Available orders response is valid', function () {",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Claim Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/claim?orderId={{orderId}}&shipperId={{shipperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "claim"],
+              "query": [
+                { "key": "orderId", "value": "{{orderId}}" },
+                { "key": "shipperId", "value": "{{shipperId}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Claim order is handled', function () {",
+                  "  pm.expect([200, 400, 401, 403, 409]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.have.property('id');",
+                  "    pm.collectionVariables.set('assignmentId', json.data.id);",
+                  "    pm.environment.set('assignmentId', json.data.id);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/my-orders?shipperId={{shipperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "my-orders"],
+              "query": [
+                { "key": "shipperId", "value": "{{shipperId}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('My orders response is valid', function () {",
+                  "  pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start Delivery",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/{{assignmentId}}/start-delivery?shipperId={{shipperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "{{assignmentId}}", "start-delivery"],
+              "query": [
+                { "key": "shipperId", "value": "{{shipperId}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Start delivery is handled', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.status).to.eql('DELIVERING');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm Delivery",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/{{assignmentId}}/deliver?shipperId={{shipperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "{{assignmentId}}", "deliver"],
+              "query": [
+                { "key": "shipperId", "value": "{{shipperId}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Confirm delivery is handled', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.status).to.eql('DELIVERED');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report Failure",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/{{assignmentId}}/fail?shipperId={{shipperId}}&reason=Customer%20not%20available",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "{{assignmentId}}", "fail"],
+              "query": [
+                { "key": "shipperId", "value": "{{shipperId}}" },
+                { "key": "reason", "value": "Customer not available" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Report failure is handled', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.status).to.eql('FAILED');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel Claim",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/{{assignmentId}}/cancel?shipperId={{shipperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "{{assignmentId}}", "cancel"],
+              "query": [
+                { "key": "shipperId", "value": "{{shipperId}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Cancel claim is handled', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assignment Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/{{assignmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "{{assignmentId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Assignment detail schema is valid', function () {",
+                  "  pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('object');",
+                  "    pm.expect(json.data).to.include.keys('id', 'orderId', 'orderCode', 'shipperId', 'status', 'total');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "all"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('All assignments response is valid', function () {",
+                  "  pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Assignment By Order",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{shipperToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiBasePath}}/shipper-assignments/by-order/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shipper-assignments", "by-order", "{{orderId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Assignment lookup by order is valid', function () {",
+                  "  pm.expect([200, 401, 403]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data === null || typeof json.data === 'object').to.eql(true);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

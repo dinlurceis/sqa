@@ -13,7 +13,7 @@ import ReviewForm from '@/components/product/ReviewForm'
 export default function OrderDetailPage() {
   const router = useRouter()
   const params = useParams()
-  const orderId = params.id as string
+  const orderId = typeof params?.id === 'string' ? params.id : ''
   const { isAuthenticated } = useAuthStore()
   
   const [loading, setLoading] = useState(true)
