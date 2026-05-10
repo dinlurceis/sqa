@@ -21,6 +21,10 @@ public interface InventoryStockRepository extends JpaRepository<InventoryStock, 
     boolean existsByWarehouseProductSku(@Param("sku") String sku);
 
     List<InventoryStock> findAllByWarehouseProduct_Supplier_Id(Long supplierId);
+
+    @Query("SELECT s FROM InventoryStock s WHERE s.warehouseProduct.product.id = :productId")
+    Optional<InventoryStock> findByProductId(@Param("productId") Long productId);
+
     @Query("SELECT s FROM InventoryStock s WHERE s.onHand > 0 AND s.onHand <= :threshold")
     List<InventoryStock> findLowStockItems(@Param("threshold") long threshold);
 }
